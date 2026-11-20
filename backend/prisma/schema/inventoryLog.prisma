@@ -1,0 +1,24 @@
+enum InventoryChangeType {
+  RESTOCK
+  SALE
+  ADJUSTMENT
+}
+
+model InventoryLog {
+  id             Int                 @id @default(autoincrement())
+  outletId       Int                 @map("outlet_id")
+  menuItemId     Int                 @map("menu_item_id")
+  changeType     InventoryChangeType @map("change_type")
+  quantityChange Int                 @map("quantity_change")
+  balanceAfter   Int                 @map("balance_after")
+  saleId         Int?                @map("sale_id")
+  note           String?             @db.VarChar(255)
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  outlet   Outlet   @relation(fields: [outletId], references: [id])
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id])
+  sale     Sale?    @relation(fields: [saleId], references: [id])
+
+  @@index([outletId, menuItemId, createdAt])
+  @@map("inventory_logs")
+}

@@ -1,0 +1,13 @@
+model Outlet {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique @db.VarChar(100)
+  location  String?  @db.VarChar(255)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  menuItems      OutletMenuItem[]
+  sales          Sale[]
+  receiptCounter ReceiptCounter?
+  inventoryLogs  InventoryLog[]
+
+  @@map("outlets")
+}

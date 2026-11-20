@@ -1,0 +1,12 @@
+model Inventory {
+  id         Int      @id @default(autoincrement())
+  outletId   Int      @map("outlet_id")
+  menuItemId Int      @map("menu_item_id")
+  quantity   Int      @default(0)
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  outletMenuItem OutletMenuItem @relation(fields: [outletId, menuItemId], references: [outletId, menuItemId], onDelete: Cascade)
+
+  @@unique([outletId, menuItemId])
+  @@map("inventory")
+}

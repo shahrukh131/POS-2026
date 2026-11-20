@@ -1,0 +1,15 @@
+model Sale {
+  id            Int      @id @default(autoincrement())
+  outletId      Int      @map("outlet_id")
+  receiptNumber String   @map("receipt_number") @db.VarChar(30)
+  totalAmount   Decimal  @map("total_amount") @db.Decimal(12, 2)
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  outlet        Outlet         @relation(fields: [outletId], references: [id])
+  items         SaleItem[]
+  inventoryLogs InventoryLog[]
+
+  @@unique([outletId, receiptNumber])
+  @@index([outletId, createdAt])
+  @@map("sales")
+}

@@ -1,0 +1,8 @@
+model ReceiptCounter {
+  outletId   Int @id @map("outlet_id")
+  lastNumber Int @default(0) @map("last_number")
+
+  outlet Outlet @relation(fields: [outletId], references: [id], onDelete: Cascade)
+
+  @@map("outlet_receipt_counters")
+}
