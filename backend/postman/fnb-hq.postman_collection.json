@@ -1,0 +1,3556 @@
+{
+  "info": {
+    "name": "F&B HQ API",
+    "description": "Health, outlets, master menu, assignments, inventory, outlet menu, sales. Run top to bottom (Collection Runner) — later requests use ids saved by earlier ones. Each run creates new test rows (no DELETE API by design). Needs the seed (npm run db:seed) for DHA/GUL/UTT checks.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "runId",
+      "value": ""
+    },
+    {
+      "key": "outletName",
+      "value": ""
+    },
+    {
+      "key": "outletCode",
+      "value": ""
+    },
+    {
+      "key": "outletId",
+      "value": ""
+    },
+    {
+      "key": "menuItemId",
+      "value": ""
+    },
+    {
+      "key": "inactiveItemId",
+      "value": ""
+    },
+    {
+      "key": "gulOutletId",
+      "value": ""
+    },
+    {
+      "key": "dhaOutletId",
+      "value": ""
+    },
+    {
+      "key": "uttOutletId",
+      "value": ""
+    },
+    {
+      "key": "emptyCode",
+      "value": ""
+    },
+    {
+      "key": "emptyOutletId",
+      "value": ""
+    },
+    {
+      "key": "saleId",
+      "value": ""
+    },
+    {
+      "key": "clientId",
+      "value": ""
+    },
+    {
+      "key": "idemSaleId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "0. Health",
+      "description": "Liveness + DB ping.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health",
+            "description": "200 with db up. Stop Postgres (5433) and re-send → 503 DB_UNAVAILABLE."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.status\", () => pm.expect(pm.response.json().data.status).to.eql(\"ok\"));",
+                  "pm.test(\"data.db\", () => pm.expect(pm.response.json().data.db).to.eql(\"up\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Outlets",
+      "description": "Rules 1–2: unique name/code, code format, counter created with the outlet, code immutable.",
+      "item": [
+        {
+          "name": "Create outlet (lowercase code → uppercased)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "description": "Rule 1–2. Pre-request generates a unique name and a random lowercase code for this run.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{outletName}}\",\n  \"code\": \"{{outletCode}}\",\n  \"location\": \"Road 11, Banani\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"runId\", Date.now().toString(36));",
+                  "const len = 4 + Math.floor(Math.random() * 3);",
+                  "let c = \"\"; for (let i = 0; i < len; i++) c += \"abcdefghijklmnopqrstuvwxyz\"[Math.floor(Math.random() * 26)];",
+                  "pm.collectionVariables.set(\"outletCode\", c);",
+                  "pm.collectionVariables.set(\"outletName\", \"Test Outlet \" + pm.collectionVariables.get(\"runId\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"code uppercased\", () => { pm.expect(pm.response.json().data.code).to.eql(pm.collectionVariables.get(\"outletCode\").toUpperCase()); });",
+                  "pm.test(\"data.location\", () => pm.expect(pm.response.json().data.location).to.eql(\"Road 11, Banani\"));",
+                  "pm.collectionVariables.set(\"outletId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate name → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{outletName}}\",\n  \"code\": \"ZZDUPX\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error.code = DUPLICATE\", () => pm.expect(pm.response.json().error.code).to.eql(\"DUPLICATE\"));",
+                  "pm.test(\"fields = [name]\", () => { pm.expect(pm.response.json().error.details.fields).to.eql([\"name\"]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate code (seeded DHA) → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Another {{outletName}}\",\n  \"code\": \"DHA\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error.code = DUPLICATE\", () => pm.expect(pm.response.json().error.code).to.eql(\"DUPLICATE\"));",
+                  "pm.test(\"fields = [code]\", () => { pm.expect(pm.response.json().error.details.fields).to.eql([\"code\"]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bad code format (D1) → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bad {{outletName}}\",\n  \"code\": \"D1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown key → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Bad {{outletName}}\",\n  \"code\": \"ZZQQ\",\n  \"foo\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List outlets (sorted by id)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"contains the new outlet\", () => { pm.expect(pm.response.json().data.some(o => o.id === Number(pm.collectionVariables.get(\"outletId\")))).to.be.true; });",
+                  "pm.test(\"sorted by id\", () => { const ids = pm.response.json().data.map(o => o.id); pm.expect(ids).to.eql([...ids].sort((a, b) => a - b)); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get outlet by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"id matches\", () => { pm.expect(pm.response.json().data.id).to.eql(Number(pm.collectionVariables.get(\"outletId\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get outlet 999999 → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get outlet abc → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/abc"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch location",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"location\": \"Road 12, Banani\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.location\", () => pm.expect(pm.response.json().data.location).to.eql(\"Road 12, Banani\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch location null (clears it)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"location\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"location is null\", () => { pm.expect(pm.response.json().data.location).to.be.null; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch empty body → 400",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch code → 400 (immutable)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}",
+            "description": "Code is printed on existing receipts, so it can't change.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"XYZ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));",
+                  "pm.test(\"explains why\", () => { pm.expect(pm.response.json().error.details.body.properties.code.errors[0].includes(\"receipts\")).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch name to seeded name → 409",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Chai & Chill Dhanmondi\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error.code = DUPLICATE\", () => pm.expect(pm.response.json().error.code).to.eql(\"DUPLICATE\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch outlet 999999 → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/999999",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Menu items",
+      "description": "Rule 3: unique sku, basePrice ≥ 0 with max 2 decimals. Money returned as string. No delete (rule 10).",
+      "item": [
+        {
+          "name": "Create menu item (sku trimmed + uppercased)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \" test-{{runId}} \",\n  \"name\": \"Test Tea {{runId}}\",\n  \"basePrice\": 250\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"sku trimmed + uppercased\", () => { pm.expect(pm.response.json().data.sku).to.eql((\"TEST-\" + pm.collectionVariables.get(\"runId\")).toUpperCase()); });",
+                  "pm.test(\"basePrice is the string 250.00\", () => pm.expect(pm.response.json().data.basePrice).to.eql(\"250.00\"));",
+                  "pm.test(\"isActive defaults to true\", () => { pm.expect(pm.response.json().data.isActive).to.be.true; });",
+                  "pm.collectionVariables.set(\"menuItemId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create inactive menu item",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"test-inactive-{{runId}}\",\n  \"name\": \"Inactive Tea {{runId}}\",\n  \"basePrice\": 10,\n  \"isActive\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"isActive false\", () => { pm.expect(pm.response.json().data.isActive).to.be.false; });",
+                  "pm.collectionVariables.set(\"inactiveItemId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate sku → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"TEST-{{runId}}\",\n  \"name\": \"Dup\",\n  \"basePrice\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error.code = DUPLICATE\", () => pm.expect(pm.response.json().error.code).to.eql(\"DUPLICATE\"));",
+                  "pm.test(\"fields = [sku]\", () => { pm.expect(pm.response.json().error.details.fields).to.eql([\"sku\"]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Negative basePrice → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"bad-{{runId}}\",\n  \"name\": \"Bad\",\n  \"basePrice\": -1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "basePrice with 3 decimals → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"bad-{{runId}}\",\n  \"name\": \"Bad\",\n  \"basePrice\": 1.234\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "basePrice as string → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"bad-{{runId}}\",\n  \"name\": \"Bad\",\n  \"basePrice\": \"10\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List menu items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/menu-items"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"contains the new item\", () => { pm.expect(pm.response.json().data.some(i => i.id === Number(pm.collectionVariables.get(\"menuItemId\")))).to.be.true; });",
+                  "pm.test(\"money is a string\", () => { pm.expect(pm.response.json().data.every(i => typeof i.basePrice === \"string\")).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List ?isActive=false",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/menu-items?isActive=false"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"all inactive\", () => { pm.expect(pm.response.json().data.every(i => i.isActive === false)).to.be.true; });",
+                  "pm.test(\"includes the inactive test item\", () => { pm.expect(pm.response.json().data.some(i => i.id === Number(pm.collectionVariables.get(\"inactiveItemId\")))).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List ?isActive=maybe → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/menu-items?isActive=maybe"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get menu item by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/menu-items/{{menuItemId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"id matches\", () => { pm.expect(pm.response.json().data.id).to.eql(Number(pm.collectionVariables.get(\"menuItemId\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get menu item 999999 → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/menu-items/999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = MENU_ITEM_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"MENU_ITEM_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch basePrice 19.99",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"basePrice\": 19.99\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.basePrice\", () => pm.expect(pm.response.json().data.basePrice).to.eql(\"19.99\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch empty body → 400",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch sku → 400 (not editable)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"X\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch menu item 999999 → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items/999999",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"x\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = MENU_ITEM_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"MENU_ITEM_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Assignments",
+      "description": "Rules 4–10: assign + inventory row (qty 0), override, effective price, unassign via isAvailable. No DELETE.",
+      "item": [
+        {
+          "name": "Assign item to outlet",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
+            "description": "Rules 4–5: creates the assignment AND its inventory row (stock 0) in one transaction.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"menuItemId\": {{menuItemId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"data.stock\", () => pm.expect(pm.response.json().data.stock).to.eql(0));",
+                  "pm.test(\"priceOverride null\", () => { pm.expect(pm.response.json().data.priceOverride).to.be.null; });",
+                  "pm.test(\"effectivePrice = basePrice 19.99\", () => pm.expect(pm.response.json().data.effectivePrice).to.eql(\"19.99\"));",
+                  "pm.test(\"data.isAvailable\", () => pm.expect(pm.response.json().data.isAvailable).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign again → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"menuItemId\": {{menuItemId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error.code = ALREADY_ASSIGNED\", () => pm.expect(pm.response.json().error.code).to.eql(\"ALREADY_ASSIGNED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign to unknown outlet → 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/999999/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"menuItemId\": {{menuItemId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign unknown item → 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"menuItemId\": 999999\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = MENU_ITEM_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"MENU_ITEM_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Assign inactive item → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"menuItemId\": {{inactiveItemId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = MENU_ITEM_INACTIVE\", () => pm.expect(pm.response.json().error.code).to.eql(\"MENU_ITEM_INACTIVE\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "menuItemId as string → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"menuItemId\": \"5\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Negative priceOverride → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"menuItemId\": {{menuItemId}},\n  \"priceOverride\": -1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set priceOverride 15.5",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "description": "Rules 6–7: effectivePrice = priceOverride ?? basePrice.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceOverride\": 15.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.priceOverride\", () => pm.expect(pm.response.json().data.priceOverride).to.eql(\"15.50\"));",
+                  "pm.test(\"data.effectivePrice\", () => pm.expect(pm.response.json().data.effectivePrice).to.eql(\"15.50\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Clear priceOverride (null)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceOverride\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"priceOverride null\", () => { pm.expect(pm.response.json().data.priceOverride).to.be.null; });",
+                  "pm.test(\"data.effectivePrice\", () => pm.expect(pm.response.json().data.effectivePrice).to.eql(\"19.99\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unassign (isAvailable=false)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "description": "Rule 10: unassign = isAvailable false. No DELETE.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isAvailable\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.isAvailable\", () => pm.expect(pm.response.json().data.isAvailable).to.eql(false));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List still shows the unavailable item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"item listed with isAvailable false\", () => { const a = pm.response.json().data.find(x => x.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\"))); pm.expect(a.isAvailable).to.be.false; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST while unavailable → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
+            "description": "Re-assigning is a PATCH isAvailable=true, POST stays 409.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"menuItemId\": {{menuItemId}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error.code = ALREADY_ASSIGNED\", () => pm.expect(pm.response.json().error.code).to.eql(\"ALREADY_ASSIGNED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-enable (isAvailable=true)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isAvailable\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.isAvailable\", () => pm.expect(pm.response.json().data.isAvailable).to.eql(true));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch empty body → 400",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch unassigned item → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{inactiveItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isAvailable\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = NOT_ASSIGNED\", () => pm.expect(pm.response.json().error.code).to.eql(\"NOT_ASSIGNED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Patch on unknown outlet → 404",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/999999/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isAvailable\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List for unknown outlet → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/999999/menu-items"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Find seeded Gulshan outlet",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "description": "Looks up GUL's id so the next request works on any machine."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const gul = pm.response.json().data.find(o => o.code === \"GUL\");",
+                  "pm.test(\"GUL exists (run npm run db:seed)\", () => { pm.expect(Boolean(gul)).to.be.true; });",
+                  "if (gul) pm.collectionVariables.set(\"gulOutletId\", gul.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Gulshan assignments: override price",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{gulOutletId}}/menu-items",
+            "description": "Seeded Masala Chai at GUL: basePrice 60, override 80 → effective 80. Chicken Puri is unassigned but still listed for HQ."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const rows = pm.response.json().data;",
+                  "const masala = rows.find(r => r.sku === \"MASALA-01\");",
+                  "pm.test(\"Masala Chai 60.00 / 80.00 / 80.00\", () => { pm.expect([masala.basePrice, masala.priceOverride, masala.effectivePrice]).to.eql([\"60.00\", \"80.00\", \"80.00\"]); });",
+                  "pm.test(\"Chicken Puri listed as unavailable\", () => { pm.expect(rows.find(r => r.sku === \"CPURI-01\").isAvailable).to.be.false; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Inventory",
+      "description": "Rules 11–16: stock per item, restock (+q), adjust (absolute, delta logged), logs newest first. Uses the item assigned in folder 3 (starts at stock 0).",
+      "item": [
+        {
+          "name": "List outlet inventory",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"assigned item listed with quantity 0\", () => { const r = pm.response.json().data.find(x => x.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\"))); pm.expect(r.quantity).to.eql(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restock +10",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/restock",
+            "description": "Rule 14: atomic increment + RESTOCK log; balanceAfter comes from the DB.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 10,\n  \"note\": \"Morning delivery\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.quantity\", () => pm.expect(pm.response.json().data.quantity).to.eql(10));",
+                  "pm.test(\"RESTOCK log +10 / 10\", () => { const l = pm.response.json().data.log; pm.expect([l.changeType, l.quantityChange, l.balanceAfter, l.note]).to.eql([\"RESTOCK\", 10, 10, \"Morning delivery\"]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Adjust to 4 (stock count)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}",
+            "description": "Rule 15: absolute value; logged delta = new − old = −6.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 4,\n  \"note\": \"Stock count: 6 spoiled\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.quantity\", () => pm.expect(pm.response.json().data.quantity).to.eql(4));",
+                  "pm.test(\"ADJUSTMENT log −6 / 4\", () => { const l = pm.response.json().data.log; pm.expect([l.changeType, l.quantityChange, l.balanceAfter]).to.eql([\"ADJUSTMENT\", -6, 4]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Adjust to same value → no log",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.quantity\", () => pm.expect(pm.response.json().data.quantity).to.eql(4));",
+                  "pm.test(\"log is null\", () => { pm.expect(pm.response.json().data.log).to.be.null; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logs (newest first, Σ = stock)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs",
+            "description": "Invariant: sum of quantityChange = current quantity (4)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const logs = pm.response.json().data;",
+                  "pm.test(\"2 logs, newest first\", () => { pm.expect(logs.map(l => l.changeType)).to.eql([\"ADJUSTMENT\", \"RESTOCK\"]); });",
+                  "pm.test(\"Σ quantityChange = 4\", () => { pm.expect(logs.reduce((s, l) => s + l.quantityChange, 0)).to.eql(4); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logs ?limit=1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=1"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"1 row\", () => { pm.expect(pm.response.json().data.length).to.eql(1); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restock quantity 0 → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/restock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restock negative → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/restock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": -5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restock decimal → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/restock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 1.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restock as string → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/restock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": \"5\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restock over cap → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/restock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 1000001\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Adjust negative → 400",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": -1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Adjust unknown key → 400",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 1,\n  \"foo\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restock unassigned item → 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{inactiveItemId}}/restock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = NOT_ASSIGNED\", () => pm.expect(pm.response.json().error.code).to.eql(\"NOT_ASSIGNED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Adjust unassigned item → 404",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{inactiveItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = NOT_ASSIGNED\", () => pm.expect(pm.response.json().error.code).to.eql(\"NOT_ASSIGNED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logs of unassigned item → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{inactiveItemId}}/logs"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = NOT_ASSIGNED\", () => pm.expect(pm.response.json().error.code).to.eql(\"NOT_ASSIGNED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restock on unknown outlet → 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/999999/inventory/{{menuItemId}}/restock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Inventory of unknown outlet → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/999999/inventory"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logs ?limit=0 → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=0"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logs ?limit=201 → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=201"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Outlet menu",
+      "description": "Rules 7–9: only assigned + available + active items, effective price, sorted by name. Outlet-facing (POS).",
+      "item": [
+        {
+          "name": "Find seeded outlets (DHA/GUL/UTT)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const all = pm.response.json().data;",
+                  "for (const c of [\"DHA\", \"GUL\", \"UTT\"]) { const o = all.find(x => x.code === c); if (o) pm.collectionVariables.set(c.toLowerCase() + \"OutletId\", o.id); }",
+                  "pm.test(\"all 3 seeded outlets exist (run npm run db:seed)\", () => { [\"DHA\", \"GUL\", \"UTT\"].forEach(c => pm.expect(Boolean(all.find(x => x.code === c))).to.be.true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DHA menu (inactive Lassi hidden)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{dhaOutletId}}/menu"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"items + prices (sorted by name)\", () => { pm.expect(pm.response.json().data.map(i => [i.name, i.price])).to.eql([[\"Dudh Cha\",\"40.00\"],[\"Lemon Tea\",\"50.00\"],[\"Malai Chai\",\"90.00\"],[\"Masala Chai\",\"60.00\"],[\"Singara\",\"20.00\"]]); });",
+                  "pm.test(\"Malai Chai out of stock (inStock false)\", () => { const m = pm.response.json().data.find(i => i.sku === \"MALAI-01\"); pm.expect([m.stock, m.inStock]).to.eql([0, false]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GUL menu (override 80, unavailable Puri hidden)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{gulOutletId}}/menu"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"items + prices (sorted by name)\", () => { pm.expect(pm.response.json().data.map(i => [i.name, i.price])).to.eql([[\"Cold Coffee\",\"150.00\"],[\"Malai Chai\",\"90.00\"],[\"Masala Chai\",\"80.00\"],[\"Samosa\",\"25.00\"]]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "UTT menu (override 35)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{uttOutletId}}/menu"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"items + prices (sorted by name)\", () => { pm.expect(pm.response.json().data.map(i => [i.name, i.price])).to.eql([[\"Dudh Cha\",\"35.00\"],[\"Lemon Tea\",\"50.00\"],[\"Samosa\",\"25.00\"],[\"Singara\",\"20.00\"]]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Test outlet menu shows the test item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu",
+            "description": "Item from folder 3 (basePrice 19.99, stock 4 after folder 5)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"price 19.99, stock 4, inStock\", () => { const r = pm.response.json().data.find(i => i.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\"))); pm.expect([r.price, r.stock, r.inStock]).to.eql([\"19.99\", 4, true]); });",
+                  "pm.test(\"shape\", () => { pm.expect(Object.keys(pm.response.json().data.find(i => i.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\")))).sort()).to.eql([\"inStock\", \"menuItemId\", \"name\", \"price\", \"sku\", \"stock\"]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Set override 12 (HQ)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceOverride\": 12\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Menu uses the override price",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"price 12.00\", () => { pm.expect(pm.response.json().data.find(i => i.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\"))).price).to.eql(\"12.00\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Clear override (HQ)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priceOverride\": null\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unassign item (HQ isAvailable=false)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isAvailable\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Menu hides unavailable item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"item hidden\", () => { pm.expect(pm.response.json().data.find(i => i.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\"))) === undefined).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-enable item (HQ isAvailable=true)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isAvailable\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Deactivate master item (HQ isActive=false)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Menu hides inactive item",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"item hidden\", () => { pm.expect(pm.response.json().data.find(i => i.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\"))) === undefined).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reactivate master item (HQ isActive=true)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isActive\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Menu shows item again",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"item back at 19.99\", () => { pm.expect(pm.response.json().data.find(i => i.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\"))).price).to.eql(\"19.99\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create outlet with no items",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Empty Outlet {{runId}}\",\n  \"code\": \"{{emptyCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let c = \"\"; for (let i = 0; i < 6; i++) c += \"ABCDEFGHIJKLMNOPQRSTUVWXYZ\"[Math.floor(Math.random() * 26)];",
+                  "pm.collectionVariables.set(\"emptyCode\", c);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set(\"emptyOutletId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Empty menu → 200 []",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{emptyOutletId}}/menu",
+            "description": "Outlet exists but sells nothing yet: 200 with an empty list, not 404."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data = []\", () => pm.expect(pm.response.json().data).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown outlet → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/999999/menu"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bad outlet id → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/abc/menu"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "7. Sales",
+      "description": "Rules 17–28: one transaction, server prices, atomic stock, gapless receipts per outlet, clientId idempotency. Uses the test outlet/item (19.99, stock 4).",
+      "item": [
+        {
+          "name": "Sell 2 → 201, receipt 000001",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "description": "Price comes from the server (19.99), total = 2 × 19.99. First sale of a new outlet → CODE-000001.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 2 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"receipt = CODE-000001\", () => { pm.expect(pm.response.json().data.receiptNumber).to.eql(pm.collectionVariables.get(\"outletCode\").toUpperCase() + \"-000001\"); });",
+                  "pm.test(\"data.totalAmount\", () => pm.expect(pm.response.json().data.totalAmount).to.eql(\"39.98\"));",
+                  "pm.test(\"line: qty 2 × 19.99 = 39.98\", () => { const l = pm.response.json().data.items[0]; pm.expect([l.quantity, l.unitPrice, l.lineTotal]).to.eql([2, \"19.99\", \"39.98\"]); });",
+                  "pm.collectionVariables.set(\"saleId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Duplicate lines merged → 1 line qty 2",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "description": "Rule 18: two lines of the same item become one line.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 },\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"receipt = CODE-000002\", () => { pm.expect(pm.response.json().data.receiptNumber).to.eql(pm.collectionVariables.get(\"outletCode\").toUpperCase() + \"-000002\"); });",
+                  "pm.test(\"one merged line qty 2\", () => { const items = pm.response.json().data.items; pm.expect([items.length, items[0].quantity]).to.eql([1, 2]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Out of stock → 409 INSUFFICIENT_STOCK",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "description": "Rule 20: stock is now 0; whole sale fails, nothing changes, no receipt number used.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error.code = INSUFFICIENT_STOCK\", () => pm.expect(pm.response.json().error.code).to.eql(\"INSUFFICIENT_STOCK\"));",
+                  "pm.test(\"details: requested 1, available 0\", () => { const d = pm.response.json().error.details; pm.expect([d.requested, d.available]).to.eql([1, 0]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Restock 5 (HQ)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/restock",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quantity\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"data.quantity\", () => pm.expect(pm.response.json().data.quantity).to.eql(5));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Next sale → 000003 (failed sale used no number)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "description": "Rule 28: the 409 above rolled back, so numbering continues without a gap.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"receipt = CODE-000003\", () => { pm.expect(pm.response.json().data.receiptNumber).to.eql(pm.collectionVariables.get(\"outletCode\").toUpperCase() + \"-000003\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SALE log written with saleId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=1",
+            "description": "Rule 23: SALE log −1, balanceAfter 4."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"newest log = SALE −1 / 4 with saleId\", () => { const l = pm.response.json().data[0]; pm.expect([l.changeType, l.quantityChange, l.balanceAfter, typeof l.saleId]).to.eql([\"SALE\", -1, 4, \"number\"]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get sale (receipt view)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales/{{saleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"receipt = CODE-000001\", () => { pm.expect(pm.response.json().data.receiptNumber).to.eql(pm.collectionVariables.get(\"outletCode\").toUpperCase() + \"-000001\"); });",
+                  "pm.test(\"item name included\", () => { pm.expect(typeof pm.response.json().data.items[0].name).to.eql(\"string\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get sale from another outlet → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{gulOutletId}}/sales/{{saleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = SALE_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"SALE_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get sale 999999 → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales/999999"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = SALE_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"SALE_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get sale on unknown outlet → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/outlets/999999/sales/{{saleId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Sale with clientId → 201",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "description": "Rule 25: offline POS sends its own UUID as clientId.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ],\n  \"clientId\": \"{{clientId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"clientId\", pm.variables.replaceIn(\"{{$guid}}\"));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 201\", () => pm.response.to.have.status(201));",
+                  "pm.test(\"clientId stored\", () => { pm.expect(pm.response.json().data.clientId).to.eql(pm.collectionVariables.get(\"clientId\")); });",
+                  "pm.collectionVariables.set(\"idemSaleId\", pm.response.json().data.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Same clientId again → 200, same sale",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "description": "Re-sent offline sale: returns the existing sale, no second sale, no extra stock deduction.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ],\n  \"clientId\": \"{{clientId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"same sale id\", () => { pm.expect(pm.response.json().data.id).to.eql(Number(pm.collectionVariables.get(\"idemSaleId\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stock deducted once (3 left)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"quantity 3\", () => { pm.expect(pm.response.json().data.find(r => r.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\"))).quantity).to.eql(3); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Same clientId on another outlet → 409",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{gulOutletId}}/sales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ],\n  \"clientId\": \"{{clientId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 409\", () => pm.response.to.have.status(409));",
+                  "pm.test(\"error.code = CLIENT_ID_CONFLICT\", () => pm.expect(pm.response.json().error.code).to.eql(\"CLIENT_ID_CONFLICT\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Item not assigned → 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{inactiveItemId}}, \"quantity\": 1 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = NOT_ASSIGNED\", () => pm.expect(pm.response.json().error.code).to.eql(\"NOT_ASSIGNED\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Make item unavailable (HQ)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isAvailable\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unavailable item → 400 ITEM_NOT_SELLABLE",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = ITEM_NOT_SELLABLE\", () => pm.expect(pm.response.json().error.code).to.eql(\"ITEM_NOT_SELLABLE\"));",
+                  "pm.test(\"reason UNAVAILABLE\", () => { pm.expect(pm.response.json().error.details.items[0].reason).to.eql(\"UNAVAILABLE\"); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Re-enable item (HQ)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"isAvailable\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Unknown outlet → 404",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/999999/sales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Empty items → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Quantity 0 → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 0 }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Client-sent unitPrice → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "description": "Rule 21: prices are never taken from the client.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [ { \"menuItemId\": {{menuItemId}}, \"quantity\": 1, \"unitPrice\": 0.01 } ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Bad clientId (not a UUID) → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ],\n  \"clientId\": \"abc\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "51 lines → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    },\n    {\n      \"menuItemId\": 1,\n      \"quantity\": 1\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "9. Global errors",
+      "description": "Handled by notFound + errorHandler.",
+      "item": [
+        {
+          "name": "Unknown route → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/unknown"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code = ROUTE_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"ROUTE_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Broken JSON → 400",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"a\":",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code = INVALID_JSON\", () => pm.expect(pm.response.json().error.code).to.eql(\"INVALID_JSON\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

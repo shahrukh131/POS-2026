@@ -20,4 +20,13 @@ function update(id, data, db = prisma) {
   return db.outlet.update({ where: { id }, data });
 }
 
-module.exports = { create, createReceiptCounter, findAll, findById, update };
+// Rules 26–27: atomic +1 on the outlet's counter row (row lock held until commit). Returns the new lastNumber.
+async function incrementReceiptCounter(outletId, db = prisma) {
+  const counter = await db.receiptCounter.update({
+    where: { outletId },
+    data: { lastNumber: { increment: 1 } },
+  });
+  return counter.lastNumber;
+}
+
+module.exports = { create, createReceiptCounter, findAll, findById, update, incrementReceiptCounter };

@@ -58,18 +58,18 @@ Flow: `route → validate → controller → service → repository → DB`
 | GET | `/api/hq/menu-items?isActive=true\|false` | List master menu items (ordered by id, optional filter) |
 | GET | `/api/hq/menu-items/:id` | Single menu item (404 `MENU_ITEM_NOT_FOUND`) |
 | PATCH | `/api/hq/menu-items/:id` | Update name / basePrice / isActive |
-| POST | `/api/hq/outlets/:outletId/menu-items` | Assign item (`menuItemId`, optional `priceOverride`) + create inventory row |
-| GET | `/api/hq/outlets/:outletId/menu-items` | All assignments of an outlet (including unavailable ones) |
-| PATCH | `/api/hq/outlets/:outletId/menu-items/:menuItemId` | Set / clear `priceOverride`, set `isAvailable` (`false` = unassign) |
-| GET | `/api/hq/outlets/:outletId/inventory` | Stock per item |
-| POST | `/api/hq/outlets/:outletId/inventory/:menuItemId/restock` | Add `quantity > 0` (RESTOCK) |
-| PUT | `/api/hq/outlets/:outletId/inventory/:menuItemId` | Set absolute `quantity ≥ 0` (ADJUSTMENT) |
-| GET | `/api/hq/outlets/:outletId/inventory/:menuItemId/logs` | Stock movement history |
+| POST | `/api/hq/outlets/:outletId/menu-items` | Assign item (`menuItemId`, optional `priceOverride`) + create inventory row (qty 0). 404 `OUTLET_NOT_FOUND` / `MENU_ITEM_NOT_FOUND`, 400 `MENU_ITEM_INACTIVE`, 409 `ALREADY_ASSIGNED` |
+| GET | `/api/hq/outlets/:outletId/menu-items` | All assignments of an outlet (including unavailable ones) with `basePrice`, `priceOverride`, `effectivePrice`, `stock` |
+| PATCH | `/api/hq/outlets/:outletId/menu-items/:menuItemId` | Set / clear (`null`) `priceOverride`, set `isAvailable` (`false` = unassign, `true` = re-enable). 404 `NOT_ASSIGNED` |
+| GET | `/api/hq/outlets/:outletId/inventory` | Stock per assigned item (unavailable ones included, flagged). 404 `OUTLET_NOT_FOUND` |
+| POST | `/api/hq/outlets/:outletId/inventory/:menuItemId/restock` | `{ quantity: 1..1,000,000, note? }` → RESTOCK log. Returns `{ menuItemId, quantity, log }`. 404 `NOT_ASSIGNED` |
+| PUT | `/api/hq/outlets/:outletId/inventory/:menuItemId` | Set absolute `{ quantity: 0..1,000,000, note? }` → ADJUSTMENT log (`new − old`). No change → `log: null`, nothing written. 404 `NOT_ASSIGNED` |
+| GET | `/api/hq/outlets/:outletId/inventory/:menuItemId/logs?limit` | Stock movement history, newest first. `limit` 1–200, default 50. 404 `NOT_ASSIGNED` |
 | GET | `/api/hq/reports/revenue?from&to` | Total revenue by outlet |
 | GET | `/api/hq/reports/top-items?from&to&outletId` | Top 5 items per outlet |
-| GET | `/api/outlets/:outletId/menu` | Outlet's sellable menu with effective prices |
-| POST | `/api/outlets/:outletId/sales` | Create sale (`items[]`, optional `clientId`) |
-| GET | `/api/outlets/:outletId/sales/:saleId` | Sale with items (receipt view) |
+| GET | `/api/outlets/:outletId/menu` | Outlet's sellable menu: assigned + `isAvailable` + `isActive` only. `[{ menuItemId, sku, name, price (effective), stock, inStock }]` sorted by name. Single JOIN query (1 round trip). 404 `OUTLET_NOT_FOUND` |
+| POST | `/api/outlets/:outletId/sales` | Create sale `{ items: [{ menuItemId, quantity 1..1000 }] (1–50), clientId?: uuid }`. **201** new sale, **200** replay of an existing `clientId`. 404 `OUTLET_NOT_FOUND` / `NOT_ASSIGNED`, 400 `ITEM_NOT_SELLABLE`, 409 `INSUFFICIENT_STOCK` (details: item, requested, available) / `CLIENT_ID_CONFLICT` |
+| GET | `/api/outlets/:outletId/sales/:saleId` | Sale with items (receipt view). 404 `SALE_NOT_FOUND` (also for another outlet's sale) / `OUTLET_NOT_FOUND` |
 
 There is no DELETE endpoint for assignments. Unassigning means `PATCH isAvailable=false`.
 - No authentication (not required). The outlet is identified by :outletId in the URL.
@@ -106,9 +106,15 @@ Error:   `{ "success": false, "error": { "code": "INSUFFICIENT_STOCK", "message"
 - Any multi-table write uses `prisma.$transaction(async (tx) => ...)`, and repositories accept `tx`.
 - Stock deduct: `updateMany({ where: { quantity: { gte: q } }, data: { quantity: { decrement: q } } })`. If count is 0, throw 409 and roll back.
 - Receipt number: increment the outlet's counter (increment: 1) inside the transaction (row lock), formatted as <outlet.code>-<6 digits>, e.g. DHA-000001. (outlet_id, receipt_number) is UNIQUE.
-- Every stock change writes an InventoryLog row in the same transaction.
+- Every stock change writes an InventoryLog row in the same transaction. `balanceAfter` always comes from the DB, never from JS math on an earlier read:
+  - Restock: atomic `UPDATE … SET quantity = quantity + q RETURNING`.
+  - Adjust: `SELECT … FOR UPDATE` locks the row, `delta = new − old`, then `UPDATE … RETURNING`.
+  - Invariant: Σ `quantity_change` of an item's logs = its current `quantity`.
 - **Lock order** (prevents deadlocks between concurrent sales): deduct stock in ascending `menuItemId` order, then increment the receipt counter **last**, then insert Sale/SaleItems/logs. A short sale fails before it touches the counter, so outlets don't serialize on failed sales.
-- Idempotency: if `clientId` is given and a sale with it already exists, return that sale (handle P2002 on `client_id` the same way for races).
+- Sale `balanceAfter`: after `updateMany` succeeds, the row is re-read in the same tx. Our UPDATE holds its lock until commit, so the value is exact.
+- Sale tx options: `{ maxWait: 5000, timeout: 10000 }`, so waiting on row locks under load doesn't fail a sale.
+- Idempotency: if `clientId` is given and a sale with it already exists, return that sale (200). If it belongs to another outlet → 409 `CLIENT_ID_CONFLICT`. Handle P2002 on `client_id` the same way for races; the losing tx rolls back, so its stock and receipt number are undone.
+- Proof: `npm run test:concurrency` (`scripts/concurrency-test.js`, needs the API running) checks oversell, gapless receipts per outlet and `clientId` idempotency under parallel load.
 - DB CHECK constraints are the last line of defense (qty ≥ 0, price ≥ 0, outlet code format).
 
 ## Indexes

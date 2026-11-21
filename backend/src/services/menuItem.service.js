@@ -1,6 +1,6 @@
 const menuItemRepository = require("../repositories/menuItem.repository");
 const AppError = require("../utils/AppError");
-const { toMoney } = require("../utils/money");
+const { toMoney, toDbMoney } = require("../utils/money");
 
 function toMenuItemDto(item) {
   return { ...item, basePrice: toMoney(item.basePrice) };
@@ -9,7 +9,7 @@ function toMenuItemDto(item) {
 // Send money to Prisma as an exact decimal string, not a JS float.
 function toDbData(data) {
   const out = { ...data };
-  if (out.basePrice !== undefined) out.basePrice = out.basePrice.toFixed(2);
+  if (out.basePrice !== undefined) out.basePrice = toDbMoney(out.basePrice);
   return out;
 }
 

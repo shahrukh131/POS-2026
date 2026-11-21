@@ -17,6 +17,7 @@ No authentication. The outlet is identified by `:outletId` in the URL.
 ## 1. Master menu & assignment
 3. HQ creates master menu items (unique `sku`, `name`, `basePrice ≥ 0`).
 4. HQ assigns a menu item to a specific outlet. The same item can't be assigned twice to one outlet (409).
+   An inactive item can't be assigned (400). An unavailable assignment is re-enabled with `PATCH isAvailable=true`; POST stays 409.
 5. Assigning also creates that outlet's Inventory row with `quantity = 0`, in the same transaction.
 6. HQ can override the price per outlet (`priceOverride ≥ 0`, optional). Setting it to `null` clears the override.
 7. Effective price = `priceOverride ?? basePrice`.
@@ -46,7 +47,7 @@ No authentication. The outlet is identified by `:outletId` in the URL.
 22. Total = Σ(unitPrice × quantity), calculated on the server.
 23. Each deduction writes an InventoryLog row (SALE, with `saleId`).
 24. Everything runs in **one database transaction**.
-25. Optional `clientId` (UUID) is an idempotency key for offline POS sync. It is UNIQUE. Re-sending the same `clientId` returns the existing sale instead of creating a second one.
+25. Optional `clientId` (UUID) is an idempotency key for offline POS sync. It is UNIQUE. Re-sending the same `clientId` returns the existing sale (200) instead of creating a second one. A `clientId` already used by **another** outlet → 409 `CLIENT_ID_CONFLICT`.
 
 ## 4. Receipt number
 26. Sequential and unique **per outlet**: `<OUTLET_CODE>-<6 digits>`, e.g. `DHA-000001`.
