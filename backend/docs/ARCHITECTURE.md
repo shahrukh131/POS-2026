@@ -19,17 +19,46 @@ backend/
   prisma/schema/        one model per file, migrations/
   prisma/seed.js
   src/
-    app.js              express app, middlewares, routes
+    app.js              express app, middlewares, /health + /api
     server.js           starts the server
-    config/prisma.js    single PrismaClient instance
-    routes/             URL → controller (+ validator)
-    validators/         Zod schemas
-    controllers/        read req, call service, send res
-    services/           business logic + transactions
-    repositories/       Prisma queries only
-    middlewares/        validate, errorHandler, notFound
-    utils/              AppError, response helpers
+    routes.js           mounts each module's routers under /api
+    modules/            one folder per business module (modular monolith, see below)
+      outlet/           outlets + receipt counter
+      inventory/        stock + stock logs
+      menu/             master menu, outlet assignments, outlet-facing menu
+      sales/            sales transaction + receipt numbering
+      health/           GET /health
+    shared/
+      db/prisma.js      single PrismaClient instance
+      middleware/       validate, errorHandler, notFound
+      utils/            AppError, response, money helpers
+      validators/       common Zod pieces (id, money)
 ```
+Inside a module, files are named `<name>.<layer>.js` (`sales.routes.js`, `sales.validator.js`, `sales.controller.js`, `sales.service.js`, `sales.repository.js`), plus `index.js`.
+
+## Modules (modular monolith)
+| Module | Owns (writes) | Public API (`index.js`) | Depends on |
+|---|---|---|---|
+| `outlet` | `outlets`, `outlet_receipt_counters` | `hqRoutes`, `findById`, `ensureExists`, `nextReceiptNumber` | none |
+| `inventory` | `inventory`, `inventory_logs` | `hqRoutes`, `initStock`, `deductStock`, `getQuantity`, `writeLogs` | outlet |
+| `menu` | `menu_items`, `outlet_menu_items` | `hqRoutes`, `outletRoutes`, `findAssignmentsForSale` | outlet, inventory |
+| `sales` | `sales`, `sale_items` | `outletRoutes` | outlet, menu, inventory |
+| `health` | none | `routes` | none |
+
+Rules:
+- Inside a module: `route → validator → controller → service → repository` (layer rules below).
+- Across modules: a service may `require("../<module>")` (its `index.js`) only. Never another module's repository, service, controller, routes or validator file.
+- API functions take an optional `tx`, so a flow across modules (for example a sale) stays one `prisma.$transaction`.
+- A module writes only the tables it owns. For example, assigning an item creates the inventory row through `inventory.initStock`.
+- No dependency cycles: `outlet ← inventory ← menu ← sales`. A new module (for example `reporting`) sits on top.
+- The receipt counter row is owned by `outlet` (created in the outlet's transaction). `sales/receipt.service.js` asks `outlet.nextReceiptNumber` and formats `CODE-000001`.
+- Check: `grep -rnE 'require\("\.\./[a-z]+/[a-zA-Z]+\.(repository|service|routes|controller|validator)"\)' src/modules` must return nothing.
+
+Split points (read-only joins across module tables, to replace with API calls or read models if a module becomes a service):
+- `inventory.repository.findAllByOutlet` includes `outletMenuItem.menuItem` (sku, name, isActive, isAvailable).
+- `menu`'s assignment and outlet-menu queries read `inventory.quantity`.
+- `sales.repository` includes `menuItem` (sku, name) on sale items.
+- The sale itself needs outlet + menu + inventory in one ACID transaction. As separate services that becomes a saga (reserve stock → create sale → confirm/compensate), so outlet-ops (sales + inventory) should be split together, if at all.
 
 ## Layer rules
 | Layer | Does | Must NOT |

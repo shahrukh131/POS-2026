@@ -2,7 +2,7 @@
 require("dotenv").config({ quiet: true });
 
 const app = require("./app");
-const prisma = require("./config/prisma");
+const prisma = require("./shared/db/prisma");
 
 const PORT = Number(process.env.PORT) || 3000;
 const SHUTDOWN_TIMEOUT_MS = 10_000;

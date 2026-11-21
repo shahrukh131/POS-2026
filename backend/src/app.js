@@ -3,10 +3,10 @@ const helmet = require("helmet");
 const cors = require("cors");
 const morgan = require("morgan");
 
-const healthRoutes = require("./routes/health.routes");
+const healthRoutes = require("./modules/health").routes;
 const apiRoutes = require("./routes");
-const notFound = require("./middlewares/notFound");
-const errorHandler = require("./middlewares/errorHandler");
+const notFound = require("./shared/middleware/notFound");
+const errorHandler = require("./shared/middleware/errorHandler");
 
 const app = express();
 

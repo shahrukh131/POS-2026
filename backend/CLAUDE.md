@@ -8,6 +8,7 @@ Frontend lives in ../frontend (React, Vite). The same rules apply there, includi
 
 ## Rules
 - Layers: route → validator → controller → service → repository. Never skip one.
+- Modules (`src/modules/<x>/`): cross-module calls only via `modules/<x>/index.js`. No cycles: outlet ← inventory ← menu ← sales (see docs/ARCHITECTURE.md).
 - Multi-step writes go in prisma.$transaction.
 - Validate with Zod. Throw AppError; one global error middleware.
 - No new libraries without asking. Only touch files the task needs.

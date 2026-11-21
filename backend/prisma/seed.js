@@ -1,7 +1,7 @@
 // Demo seed: outlets, receipt counters, master menu, assignments, inventory, RESTOCK logs.
 // Idempotent: catalog data (menu, prices, assignments) is re-applied on every run;
 // runtime data (inventory quantities, receipt counters) is only created, never overwritten.
-const prisma = require("../src/config/prisma");
+const prisma = require("../src/shared/db/prisma");
 
 // Theme: "Chai & Chill", a Bangladeshi tea café chain in Dhaka. Prices in BDT.
 const OUTLETS = [
