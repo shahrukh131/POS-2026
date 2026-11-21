@@ -1,5 +1,6 @@
-function ok(res, data, status = 200) {
-  return res.status(status).json({ success: true, data });
+// Standard success envelope: { success: true, data }
+function sendSuccess(res, data, statusCode = 200) {
+  return res.status(statusCode).json({ success: true, data });
 }
 
-module.exports = { ok };
+module.exports = { sendSuccess };

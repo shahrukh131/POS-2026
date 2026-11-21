@@ -11,6 +11,7 @@ No authentication. The outlet is identified by `:outletId` in the URL.
 
 ## 0. Outlets
 1. HQ creates outlets: unique `name`, unique `code` (2–10 uppercase letters, e.g. `DHA`; DB CHECK), optional `location`.
+   `name` and `location` can be edited later. `code` is **immutable** (400 if sent), because it is printed on existing receipts.
 2. The outlet's ReceiptCounter row (`lastNumber = 0`) is created in the **same transaction** as the outlet.
 
 ## 1. Master menu & assignment

@@ -51,9 +51,12 @@ Flow: `route → validate → controller → service → repository → DB`
 |---|---|---|
 | GET | `/health` | Liveness + DB ping (for the deployed instance) |
 | POST | `/api/hq/outlets` | Create outlet (+ receipt counter) |
-| GET | `/api/hq/outlets` | List outlets |
+| GET | `/api/hq/outlets` | List outlets (ordered by id) |
+| GET | `/api/hq/outlets/:id` | Single outlet (404 `OUTLET_NOT_FOUND`) |
+| PATCH | `/api/hq/outlets/:id` | Update name / location (`null` clears location). `code` is immutable → 400 |
 | POST | `/api/hq/menu-items` | Create master menu item |
-| GET | `/api/hq/menu-items` | List master menu items |
+| GET | `/api/hq/menu-items?isActive=true\|false` | List master menu items (ordered by id, optional filter) |
+| GET | `/api/hq/menu-items/:id` | Single menu item (404 `MENU_ITEM_NOT_FOUND`) |
 | PATCH | `/api/hq/menu-items/:id` | Update name / basePrice / isActive |
 | POST | `/api/hq/outlets/:outletId/menu-items` | Assign item (`menuItemId`, optional `priceOverride`) + create inventory row |
 | GET | `/api/hq/outlets/:outletId/menu-items` | All assignments of an outlet (including unavailable ones) |

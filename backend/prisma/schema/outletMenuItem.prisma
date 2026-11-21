@@ -9,7 +9,7 @@ model OutletMenuItem {
   menuItem  MenuItem   @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
   inventory Inventory?
 
+  // Also serves WHERE outlet_id = ? (leading column), so no separate outletId index.
   @@unique([outletId, menuItemId])
-  @@index([outletId])
   @@map("outlet_menu_items")
 }
