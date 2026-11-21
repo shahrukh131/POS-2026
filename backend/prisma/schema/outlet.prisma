@@ -1,6 +1,7 @@
 model Outlet {
   id        Int      @id @default(autoincrement())
   name      String   @unique @db.VarChar(100)
+  code      String   @unique @db.VarChar(10)
   location  String?  @db.VarChar(255)
   createdAt DateTime @default(now()) @map("created_at")
 

@@ -2,6 +2,7 @@ model Sale {
   id            Int      @id @default(autoincrement())
   outletId      Int      @map("outlet_id")
   receiptNumber String   @map("receipt_number") @db.VarChar(30)
+  clientId      String?  @unique @map("client_id") @db.Uuid
   totalAmount   Decimal  @map("total_amount") @db.Decimal(12, 2)
   createdAt     DateTime @default(now()) @map("created_at")
 
