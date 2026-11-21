@@ -81,6 +81,23 @@ Error:   `{ "success": false, "error": { "code": "INSUFFICIENT_STOCK", "message"
 - One global `errorHandler` middleware converts errors to the JSON above.
 - Status codes: 400 validation, 404 not found, 409 conflict (stock/duplicate), 500 unexpected.
 - Prisma P2002 (unique) → 409, P2025 (not found) → 404.
+- Error codes from `errorHandler`:
+
+  | Source | Status | code |
+  |---|---|---|
+  | `AppError` | its own | its own |
+  | Invalid JSON body | 400 | `INVALID_JSON` |
+  | Body too large | 413 | `PAYLOAD_TOO_LARGE` |
+  | Zod failure (`validate` middleware) | 400 | `VALIDATION_ERROR` (`details` = `z.treeifyError` per body/params/query) |
+  | Unknown route | 404 | `ROUTE_NOT_FOUND` |
+  | Prisma P2002 | 409 | `DUPLICATE` (`details.fields`) |
+  | Prisma P2025 | 404 | `NOT_FOUND` |
+  | Prisma P2003 | 409 | `FK_CONSTRAINT` (`details.constraint`) |
+  | Postgres CHECK (23514) | 409 | `CONSTRAINT_VIOLATION` (`details.constraint`) |
+  | `/health` DB ping fails | 503 | `DB_UNAVAILABLE` |
+  | Anything else | 500 | `INTERNAL_ERROR` |
+- `error.stack` is included only when `NODE_ENV=development`.
+- `/health` goes through all layers too: `health.routes → health.controller → health.service → health.repository` (`SELECT 1`).
 
 ## Transactions & concurrency
 - Any multi-table write uses `prisma.$transaction(async (tx) => ...)`, and repositories accept `tx`.

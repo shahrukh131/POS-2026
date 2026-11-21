@@ -5,13 +5,16 @@
   "main": "src/server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "prisma:studio": "prisma studio"
+    "prisma:studio": "prisma studio",
+    "db:seed": "prisma db seed"
   },
   "prisma": {
-    "schema": "prisma/schema"
+    "schema": "prisma/schema",
+    "seed": "node prisma/seed.js"
   },
   "keywords": [],
   "author": "",
