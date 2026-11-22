@@ -27,6 +27,7 @@ backend/
       inventory/        stock + stock logs
       menu/             master menu, outlet assignments, outlet-facing menu
       sales/            sales transaction + receipt numbering
+      reporting/        HQ reports (read-only, raw SQL)
       health/           GET /health
     shared/
       db/prisma.js      single PrismaClient instance
@@ -43,6 +44,7 @@ Inside a module, files are named `<name>.<layer>.js` (`sales.routes.js`, `sales.
 | `inventory` | `inventory`, `inventory_logs` | `hqRoutes`, `initStock`, `deductStock`, `getQuantity`, `writeLogs` | outlet |
 | `menu` | `menu_items`, `outlet_menu_items` | `hqRoutes`, `outletRoutes`, `findAssignmentsForSale` | outlet, inventory |
 | `sales` | `sales`, `sale_items` | `outletRoutes` | outlet, menu, inventory |
+| `reporting` | none (read-only) | `hqRoutes` | none (reads outlet, menu, sales tables directly) |
 | `health` | none | `routes` | none |
 
 Rules:
@@ -58,6 +60,7 @@ Split points (read-only joins across module tables, to replace with API calls or
 - `inventory.repository.findAllByOutlet` includes `outletMenuItem.menuItem` (sku, name, isActive, isAvailable).
 - `menu`'s assignment and outlet-menu queries read `inventory.quantity`.
 - `sales.repository` includes `menuItem` (sku, name) on sale items.
+- `reporting.repository` reads `outlets`, `sales`, `sale_items`, `menu_items` with raw read-only SQL (aggregates + `ROW_NUMBER()`). As separate services this becomes a read model / replica.
 - The sale itself needs outlet + menu + inventory in one ACID transaction. As separate services that becomes a saga (reserve stock → create sale → confirm/compensate), so outlet-ops (sales + inventory) should be split together, if at all.
 
 ## Layer rules
@@ -94,8 +97,8 @@ Flow: `route → validate → controller → service → repository → DB`
 | POST | `/api/hq/outlets/:outletId/inventory/:menuItemId/restock` | `{ quantity: 1..1,000,000, note? }` → RESTOCK log. Returns `{ menuItemId, quantity, log }`. 404 `NOT_ASSIGNED` |
 | PUT | `/api/hq/outlets/:outletId/inventory/:menuItemId` | Set absolute `{ quantity: 0..1,000,000, note? }` → ADJUSTMENT log (`new − old`). No change → `log: null`, nothing written. 404 `NOT_ASSIGNED` |
 | GET | `/api/hq/outlets/:outletId/inventory/:menuItemId/logs?limit` | Stock movement history, newest first. `limit` 1–200, default 50. 404 `NOT_ASSIGNED` |
-| GET | `/api/hq/reports/revenue?from&to` | Total revenue by outlet |
-| GET | `/api/hq/reports/top-items?from&to&outletId` | Top 5 items per outlet |
+| GET | `/api/hq/reports/revenue-by-outlet?from&to` | `[{ outletId, code, name, totalRevenue, saleCount }]`, all outlets (no sales → `"0.00"`, 0), sorted by revenue desc then id. `from`/`to` `YYYY-MM-DD` inclusive UTC; invalid or `from > to` → 400 `VALIDATION_ERROR`. 1 query |
+| GET | `/api/hq/reports/top-items?outletId&limit&from&to` | `[{ outletId, code, items: [{ menuItemId, name, qtySold, revenue }] }]`, top `limit` (1–50, default 5) per outlet by qty, ties: revenue desc, name asc. Omit `outletId` = all outlets; no sales → `items: []`. 404 `OUTLET_NOT_FOUND`. 1 query (`ROW_NUMBER() OVER (PARTITION BY outlet)`) |
 | GET | `/api/outlets/:outletId/menu` | Outlet's sellable menu: assigned + `isAvailable` + `isActive` only. `[{ menuItemId, sku, name, price (effective), stock, inStock }]` sorted by name. Single JOIN query (1 round trip). 404 `OUTLET_NOT_FOUND` |
 | POST | `/api/outlets/:outletId/sales` | Create sale `{ items: [{ menuItemId, quantity 1..1000 }] (1–50), clientId?: uuid }`. **201** new sale, **200** replay of an existing `clientId`. 404 `OUTLET_NOT_FOUND` / `NOT_ASSIGNED`, 400 `ITEM_NOT_SELLABLE`, 409 `INSUFFICIENT_STOCK` (details: item, requested, available) / `CLIENT_ID_CONFLICT` |
 | GET | `/api/outlets/:outletId/sales/:saleId` | Sale with items (receipt view). 404 `SALE_NOT_FOUND` (also for another outlet's sale) / `OUTLET_NOT_FOUND` |

@@ -55,6 +55,6 @@ No authentication. The outlet is identified by `:outletId` in the URL.
 28. A failed sale rolls back, so its number is not used up.
 
 ## 5. Reporting (HQ)
-29. Total revenue by outlet. Outlets with no sales are included with revenue `0.00`.
+29. Total revenue (Σ sale `totalAmount`) and sale count by outlet. Outlets with no sales are included with revenue `0.00` and count `0`.
 30. Optional `from`/`to` filter: ISO dates (`YYYY-MM-DD`), inclusive, interpreted in UTC. `from > to` → 400.
-31. Top 5 selling items per outlet, by total quantity sold (revenue also shown). Ties are broken by revenue (desc), then item name (asc). The same date filter applies.
+31. Top 5 selling items per outlet (`limit` 1–50 to change), by total quantity sold (revenue = Σ line totals, also shown). Ties are broken by revenue (desc), then item name (asc). The same date filter applies. Optional `outletId` restricts to one outlet (unknown → 404). Outlets with no sales return `items: []`. Inactive/unassigned items still count (historical sales).

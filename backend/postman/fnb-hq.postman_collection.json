@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "F&B HQ API",
-    "description": "Health, outlets, master menu, assignments, inventory, outlet menu, sales. Run top to bottom (Collection Runner) — later requests use ids saved by earlier ones. Each run creates new test rows (no DELETE API by design). Needs the seed (npm run db:seed) for DHA/GUL/UTT checks.",
+    "description": "Health, outlets, master menu, assignments, inventory, outlet menu, sales, reports. Run top to bottom (Collection Runner) — later requests use ids saved by earlier ones. Each run creates new test rows (no DELETE API by design). Needs the seed (npm run db:seed) for DHA/GUL/UTT checks.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -64,20 +64,24 @@
     {
       "key": "idemSaleId",
       "value": ""
+    },
+    {
+      "key": "today",
+      "value": ""
     }
   ],
   "item": [
     {
       "name": "0. Health",
-      "description": "Liveness + DB ping.",
+      "description": "Liveness + DB ping.\n\nEndpoints used:\n- GET /health — Liveness + DB ping",
       "item": [
         {
-          "name": "Health check",
+          "name": "Health check — API + DB up → 200",
           "request": {
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/health",
-            "description": "200 with db up. Stop Postgres (5433) and re-send → 503 DB_UNAVAILABLE."
+            "description": "**GET /health** — Liveness + DB ping\n\n200 with db up. Stop Postgres (5433) and re-send → 503 DB_UNAVAILABLE."
           },
           "event": [
             {
@@ -97,10 +101,10 @@
     },
     {
       "name": "1. Outlets",
-      "description": "Rules 1–2: unique name/code, code format, counter created with the outlet, code immutable.",
+      "description": "Rules 1–2: unique name/code, code format, counter created with the outlet, code immutable.\n\nEndpoints used:\n- POST /api/hq/outlets — Create an outlet (+ receipt counter)\n- GET /api/hq/outlets — List all outlets\n- GET /api/hq/outlets/:id — Get one outlet\n- PATCH /api/hq/outlets/:id — Update outlet name / location",
       "item": [
         {
-          "name": "Create outlet (lowercase code → uppercased)",
+          "name": "Create outlet — lowercase code saved uppercase → 201",
           "request": {
             "method": "POST",
             "header": [
@@ -110,7 +114,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/hq/outlets",
-            "description": "Rule 1–2. Pre-request generates a unique name and a random lowercase code for this run.",
+            "description": "**POST /api/hq/outlets** — Create an outlet (+ receipt counter)\n\nRule 1–2. Pre-request generates a unique name and a random lowercase code for this run.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"name\": \"{{outletName}}\",\n  \"code\": \"{{outletCode}}\",\n  \"location\": \"Road 11, Banani\"\n}",
@@ -150,7 +154,7 @@
           ]
         },
         {
-          "name": "Duplicate name → 409",
+          "name": "Create outlet — duplicate name → 409",
           "request": {
             "method": "POST",
             "header": [
@@ -168,7 +172,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets** — Create an outlet (+ receipt counter)"
           },
           "event": [
             {
@@ -185,7 +190,7 @@
           ]
         },
         {
-          "name": "Duplicate code (seeded DHA) → 409",
+          "name": "Create outlet — duplicate code DHA → 409",
           "request": {
             "method": "POST",
             "header": [
@@ -203,7 +208,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets** — Create an outlet (+ receipt counter)"
           },
           "event": [
             {
@@ -220,7 +226,7 @@
           ]
         },
         {
-          "name": "Bad code format (D1) → 400",
+          "name": "Create outlet — bad code format \"D1\" → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -238,7 +244,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets** — Create an outlet (+ receipt counter)"
           },
           "event": [
             {
@@ -254,7 +261,7 @@
           ]
         },
         {
-          "name": "Unknown key → 400",
+          "name": "Create outlet — unknown field → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -272,7 +279,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets** — Create an outlet (+ receipt counter)"
           },
           "event": [
             {
@@ -288,11 +296,12 @@
           ]
         },
         {
-          "name": "List outlets (sorted by id)",
+          "name": "List outlets — sorted by id → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets"
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "description": "**GET /api/hq/outlets** — List all outlets"
           },
           "event": [
             {
@@ -309,11 +318,12 @@
           ]
         },
         {
-          "name": "Get outlet by id",
+          "name": "Get outlet — by id → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}"
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}",
+            "description": "**GET /api/hq/outlets/:id** — Get one outlet"
           },
           "event": [
             {
@@ -329,11 +339,12 @@
           ]
         },
         {
-          "name": "Get outlet 999999 → 404",
+          "name": "Get outlet — unknown id → 404",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/999999"
+            "url": "{{baseUrl}}/api/hq/outlets/999999",
+            "description": "**GET /api/hq/outlets/:id** — Get one outlet"
           },
           "event": [
             {
@@ -349,11 +360,12 @@
           ]
         },
         {
-          "name": "Get outlet abc → 400",
+          "name": "Get outlet — id \"abc\" → 400",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/abc"
+            "url": "{{baseUrl}}/api/hq/outlets/abc",
+            "description": "**GET /api/hq/outlets/:id** — Get one outlet"
           },
           "event": [
             {
@@ -369,7 +381,7 @@
           ]
         },
         {
-          "name": "Patch location",
+          "name": "Update outlet — set location → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -387,7 +399,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:id** — Update outlet name / location"
           },
           "event": [
             {
@@ -403,7 +416,7 @@
           ]
         },
         {
-          "name": "Patch location null (clears it)",
+          "name": "Update outlet — location null clears it → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -421,7 +434,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:id** — Update outlet name / location"
           },
           "event": [
             {
@@ -437,7 +451,7 @@
           ]
         },
         {
-          "name": "Patch empty body → 400",
+          "name": "Update outlet — empty body → 400",
           "request": {
             "method": "PATCH",
             "header": [
@@ -455,7 +469,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:id** — Update outlet name / location"
           },
           "event": [
             {
@@ -471,7 +486,7 @@
           ]
         },
         {
-          "name": "Patch code → 400 (immutable)",
+          "name": "Update outlet — change code (immutable) → 400",
           "request": {
             "method": "PATCH",
             "header": [
@@ -481,7 +496,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}",
-            "description": "Code is printed on existing receipts, so it can't change.",
+            "description": "**PATCH /api/hq/outlets/:id** — Update outlet name / location\n\nCode is printed on existing receipts, so it can't change.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"code\": \"XYZ\"\n}",
@@ -507,7 +522,7 @@
           ]
         },
         {
-          "name": "Patch name to seeded name → 409",
+          "name": "Update outlet — name taken by seeded outlet → 409",
           "request": {
             "method": "PATCH",
             "header": [
@@ -525,7 +540,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:id** — Update outlet name / location"
           },
           "event": [
             {
@@ -541,7 +557,7 @@
           ]
         },
         {
-          "name": "Patch outlet 999999 → 404",
+          "name": "Update outlet — unknown id → 404",
           "request": {
             "method": "PATCH",
             "header": [
@@ -559,7 +575,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:id** — Update outlet name / location"
           },
           "event": [
             {
@@ -578,10 +595,10 @@
     },
     {
       "name": "2. Menu items",
-      "description": "Rule 3: unique sku, basePrice ≥ 0 with max 2 decimals. Money returned as string. No delete (rule 10).",
+      "description": "Rule 3: unique sku, basePrice ≥ 0 with max 2 decimals. Money returned as string. No delete (rule 10).\n\nEndpoints used:\n- POST /api/hq/menu-items — Create a master menu item\n- GET /api/hq/menu-items — List master menu items\n- GET /api/hq/menu-items/:id — Get one master menu item\n- PATCH /api/hq/menu-items/:id — Update name / basePrice / isActive",
       "item": [
         {
-          "name": "Create menu item (sku trimmed + uppercased)",
+          "name": "Create menu item — sku trimmed + uppercased → 201",
           "request": {
             "method": "POST",
             "header": [
@@ -599,7 +616,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/menu-items** — Create a master menu item"
           },
           "event": [
             {
@@ -618,7 +636,7 @@
           ]
         },
         {
-          "name": "Create inactive menu item",
+          "name": "Create menu item — inactive item → 201",
           "request": {
             "method": "POST",
             "header": [
@@ -636,7 +654,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/menu-items** — Create a master menu item"
           },
           "event": [
             {
@@ -653,7 +672,7 @@
           ]
         },
         {
-          "name": "Duplicate sku → 409",
+          "name": "Create menu item — duplicate sku → 409",
           "request": {
             "method": "POST",
             "header": [
@@ -671,7 +690,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/menu-items** — Create a master menu item"
           },
           "event": [
             {
@@ -688,7 +708,7 @@
           ]
         },
         {
-          "name": "Negative basePrice → 400",
+          "name": "Create menu item — negative basePrice → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -706,7 +726,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/menu-items** — Create a master menu item"
           },
           "event": [
             {
@@ -722,7 +743,7 @@
           ]
         },
         {
-          "name": "basePrice with 3 decimals → 400",
+          "name": "Create menu item — basePrice with 3 decimals → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -740,7 +761,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/menu-items** — Create a master menu item"
           },
           "event": [
             {
@@ -756,7 +778,7 @@
           ]
         },
         {
-          "name": "basePrice as string → 400",
+          "name": "Create menu item — basePrice as string → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -774,7 +796,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/menu-items** — Create a master menu item"
           },
           "event": [
             {
@@ -790,11 +813,12 @@
           ]
         },
         {
-          "name": "List menu items",
+          "name": "List menu items — all items → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/menu-items"
+            "url": "{{baseUrl}}/api/hq/menu-items",
+            "description": "**GET /api/hq/menu-items** — List master menu items"
           },
           "event": [
             {
@@ -811,11 +835,12 @@
           ]
         },
         {
-          "name": "List ?isActive=false",
+          "name": "List menu items — filter isActive=false → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/menu-items?isActive=false"
+            "url": "{{baseUrl}}/api/hq/menu-items?isActive=false",
+            "description": "**GET /api/hq/menu-items** — List master menu items"
           },
           "event": [
             {
@@ -832,11 +857,12 @@
           ]
         },
         {
-          "name": "List ?isActive=maybe → 400",
+          "name": "List menu items — isActive=maybe → 400",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/menu-items?isActive=maybe"
+            "url": "{{baseUrl}}/api/hq/menu-items?isActive=maybe",
+            "description": "**GET /api/hq/menu-items** — List master menu items"
           },
           "event": [
             {
@@ -852,11 +878,12 @@
           ]
         },
         {
-          "name": "Get menu item by id",
+          "name": "Get menu item — by id → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/menu-items/{{menuItemId}}"
+            "url": "{{baseUrl}}/api/hq/menu-items/{{menuItemId}}",
+            "description": "**GET /api/hq/menu-items/:id** — Get one master menu item"
           },
           "event": [
             {
@@ -872,11 +899,12 @@
           ]
         },
         {
-          "name": "Get menu item 999999 → 404",
+          "name": "Get menu item — unknown id → 404",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/menu-items/999999"
+            "url": "{{baseUrl}}/api/hq/menu-items/999999",
+            "description": "**GET /api/hq/menu-items/:id** — Get one master menu item"
           },
           "event": [
             {
@@ -892,7 +920,7 @@
           ]
         },
         {
-          "name": "Patch basePrice 19.99",
+          "name": "Update menu item — basePrice 19.99 → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -910,7 +938,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/menu-items/:id** — Update name / basePrice / isActive"
           },
           "event": [
             {
@@ -926,7 +955,7 @@
           ]
         },
         {
-          "name": "Patch empty body → 400",
+          "name": "Update menu item — empty body → 400",
           "request": {
             "method": "PATCH",
             "header": [
@@ -944,7 +973,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/menu-items/:id** — Update name / basePrice / isActive"
           },
           "event": [
             {
@@ -960,7 +990,7 @@
           ]
         },
         {
-          "name": "Patch sku → 400 (not editable)",
+          "name": "Update menu item — change sku (not editable) → 400",
           "request": {
             "method": "PATCH",
             "header": [
@@ -978,7 +1008,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/menu-items/:id** — Update name / basePrice / isActive"
           },
           "event": [
             {
@@ -994,7 +1025,7 @@
           ]
         },
         {
-          "name": "Patch menu item 999999 → 404",
+          "name": "Update menu item — unknown id → 404",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1012,7 +1043,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/menu-items/:id** — Update name / basePrice / isActive"
           },
           "event": [
             {
@@ -1031,10 +1063,10 @@
     },
     {
       "name": "3. Assignments",
-      "description": "Rules 4–10: assign + inventory row (qty 0), override, effective price, unassign via isAvailable. No DELETE.",
+      "description": "Rules 4–10: assign + inventory row (qty 0), override, effective price, unassign via isAvailable. No DELETE.\n\nEndpoints used:\n- POST /api/hq/outlets/:outletId/menu-items — Assign a menu item to an outlet (+ stock row, qty 0)\n- PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId — Set priceOverride / isAvailable\n- GET /api/hq/outlets/:outletId/menu-items — All items assigned to an outlet (HQ view)\n- GET /api/hq/outlets — List all outlets",
       "item": [
         {
-          "name": "Assign item to outlet",
+          "name": "Assign item to outlet — new assignment + stock row (qty 0) → 201",
           "request": {
             "method": "POST",
             "header": [
@@ -1044,7 +1076,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
-            "description": "Rules 4–5: creates the assignment AND its inventory row (stock 0) in one transaction.",
+            "description": "**POST /api/hq/outlets/:outletId/menu-items** — Assign a menu item to an outlet (+ stock row, qty 0)\n\nRules 4–5: creates the assignment AND its inventory row (stock 0) in one transaction.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"menuItemId\": {{menuItemId}}\n}",
@@ -1072,7 +1104,7 @@
           ]
         },
         {
-          "name": "Assign again → 409",
+          "name": "Assign item to outlet — already assigned → 409",
           "request": {
             "method": "POST",
             "header": [
@@ -1090,7 +1122,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/menu-items** — Assign a menu item to an outlet (+ stock row, qty 0)"
           },
           "event": [
             {
@@ -1106,7 +1139,7 @@
           ]
         },
         {
-          "name": "Assign to unknown outlet → 404",
+          "name": "Assign item to outlet — unknown outlet → 404",
           "request": {
             "method": "POST",
             "header": [
@@ -1124,7 +1157,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/menu-items** — Assign a menu item to an outlet (+ stock row, qty 0)"
           },
           "event": [
             {
@@ -1140,7 +1174,7 @@
           ]
         },
         {
-          "name": "Assign unknown item → 404",
+          "name": "Assign item to outlet — unknown item → 404",
           "request": {
             "method": "POST",
             "header": [
@@ -1158,7 +1192,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/menu-items** — Assign a menu item to an outlet (+ stock row, qty 0)"
           },
           "event": [
             {
@@ -1174,7 +1209,7 @@
           ]
         },
         {
-          "name": "Assign inactive item → 400",
+          "name": "Assign item to outlet — inactive item → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -1192,7 +1227,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/menu-items** — Assign a menu item to an outlet (+ stock row, qty 0)"
           },
           "event": [
             {
@@ -1208,7 +1244,7 @@
           ]
         },
         {
-          "name": "menuItemId as string → 400",
+          "name": "Assign item to outlet — menuItemId as string → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -1226,7 +1262,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/menu-items** — Assign a menu item to an outlet (+ stock row, qty 0)"
           },
           "event": [
             {
@@ -1242,7 +1279,7 @@
           ]
         },
         {
-          "name": "Negative priceOverride → 400",
+          "name": "Assign item to outlet — negative priceOverride → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -1260,7 +1297,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/menu-items** — Assign a menu item to an outlet (+ stock row, qty 0)"
           },
           "event": [
             {
@@ -1276,7 +1314,7 @@
           ]
         },
         {
-          "name": "Set priceOverride 15.5",
+          "name": "Update assignment — set priceOverride 15.5 → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1286,7 +1324,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
-            "description": "Rules 6–7: effectivePrice = priceOverride ?? basePrice.",
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable\n\nRules 6–7: effectivePrice = priceOverride ?? basePrice.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"priceOverride\": 15.5\n}",
@@ -1312,7 +1350,7 @@
           ]
         },
         {
-          "name": "Clear priceOverride (null)",
+          "name": "Update assignment — clear priceOverride (null) → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1330,7 +1368,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -1347,7 +1386,7 @@
           ]
         },
         {
-          "name": "Unassign (isAvailable=false)",
+          "name": "Update assignment — unassign (isAvailable=false) → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1357,7 +1396,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items/{{menuItemId}}",
-            "description": "Rule 10: unassign = isAvailable false. No DELETE.",
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable\n\nRule 10: unassign = isAvailable false. No DELETE.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"isAvailable\": false\n}",
@@ -1382,11 +1421,12 @@
           ]
         },
         {
-          "name": "List still shows the unavailable item",
+          "name": "List outlet assignments — still shows unavailable item → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items"
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
+            "description": "**GET /api/hq/outlets/:outletId/menu-items** — All items assigned to an outlet (HQ view)"
           },
           "event": [
             {
@@ -1402,7 +1442,7 @@
           ]
         },
         {
-          "name": "POST while unavailable → 409",
+          "name": "Assign item to outlet — while unavailable → 409",
           "request": {
             "method": "POST",
             "header": [
@@ -1412,7 +1452,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/menu-items",
-            "description": "Re-assigning is a PATCH isAvailable=true, POST stays 409.",
+            "description": "**POST /api/hq/outlets/:outletId/menu-items** — Assign a menu item to an outlet (+ stock row, qty 0)\n\nRe-assigning is a PATCH isAvailable=true, POST stays 409.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"menuItemId\": {{menuItemId}}\n}",
@@ -1437,7 +1477,7 @@
           ]
         },
         {
-          "name": "Re-enable (isAvailable=true)",
+          "name": "Update assignment — re-enable (isAvailable=true) → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1455,7 +1495,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -1471,7 +1512,7 @@
           ]
         },
         {
-          "name": "Patch empty body → 400",
+          "name": "Update assignment — empty body → 400",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1489,7 +1530,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -1505,7 +1547,7 @@
           ]
         },
         {
-          "name": "Patch unassigned item → 404",
+          "name": "Update assignment — item not assigned → 404",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1523,7 +1565,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -1539,7 +1582,7 @@
           ]
         },
         {
-          "name": "Patch on unknown outlet → 404",
+          "name": "Update assignment — unknown outlet → 404",
           "request": {
             "method": "PATCH",
             "header": [
@@ -1557,7 +1600,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -1573,11 +1617,12 @@
           ]
         },
         {
-          "name": "List for unknown outlet → 404",
+          "name": "List outlet assignments — unknown outlet → 404",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/999999/menu-items"
+            "url": "{{baseUrl}}/api/hq/outlets/999999/menu-items",
+            "description": "**GET /api/hq/outlets/:outletId/menu-items** — All items assigned to an outlet (HQ view)"
           },
           "event": [
             {
@@ -1593,12 +1638,12 @@
           ]
         },
         {
-          "name": "Find seeded Gulshan outlet",
+          "name": "List outlets — find seeded GUL id → 200",
           "request": {
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/api/hq/outlets",
-            "description": "Looks up GUL's id so the next request works on any machine."
+            "description": "**GET /api/hq/outlets** — List all outlets\n\nLooks up GUL's id so the next request works on any machine."
           },
           "event": [
             {
@@ -1616,12 +1661,12 @@
           ]
         },
         {
-          "name": "Gulshan assignments: override price",
+          "name": "List outlet assignments — GUL shows override price → 200",
           "request": {
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/api/hq/outlets/{{gulOutletId}}/menu-items",
-            "description": "Seeded Masala Chai at GUL: basePrice 60, override 80 → effective 80. Chicken Puri is unassigned but still listed for HQ."
+            "description": "**GET /api/hq/outlets/:outletId/menu-items** — All items assigned to an outlet (HQ view)\n\nSeeded Masala Chai at GUL: basePrice 60, override 80 → effective 80. Chicken Puri is unassigned but still listed for HQ."
           },
           "event": [
             {
@@ -1642,15 +1687,16 @@
       ]
     },
     {
-      "name": "5. Inventory",
-      "description": "Rules 11–16: stock per item, restock (+q), adjust (absolute, delta logged), logs newest first. Uses the item assigned in folder 3 (starts at stock 0).",
+      "name": "4. Inventory",
+      "description": "Rules 11–16: stock per item, restock (+q), adjust (absolute, delta logged), logs newest first. Uses the item assigned in folder 3 (starts at stock 0).\n\nEndpoints used:\n- GET /api/hq/outlets/:outletId/inventory — Stock per assigned item\n- POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock — Add stock (RESTOCK log)\n- PUT /api/hq/outlets/:outletId/inventory/:menuItemId — Set absolute stock (ADJUSTMENT log)\n- GET /api/hq/outlets/:outletId/inventory/:menuItemId/logs — Stock movement history, newest first",
       "item": [
         {
-          "name": "List outlet inventory",
+          "name": "List inventory — test outlet → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory"
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory",
+            "description": "**GET /api/hq/outlets/:outletId/inventory** — Stock per assigned item"
           },
           "event": [
             {
@@ -1666,7 +1712,7 @@
           ]
         },
         {
-          "name": "Restock +10",
+          "name": "Restock item — +10 → 200, RESTOCK log",
           "request": {
             "method": "POST",
             "header": [
@@ -1676,7 +1722,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/restock",
-            "description": "Rule 14: atomic increment + RESTOCK log; balanceAfter comes from the DB.",
+            "description": "**POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock** — Add stock (RESTOCK log)\n\nRule 14: atomic increment + RESTOCK log; balanceAfter comes from the DB.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"quantity\": 10,\n  \"note\": \"Morning delivery\"\n}",
@@ -1702,7 +1748,7 @@
           ]
         },
         {
-          "name": "Adjust to 4 (stock count)",
+          "name": "Adjust stock — set to 4 (stock count) → 200, ADJUSTMENT log",
           "request": {
             "method": "PUT",
             "header": [
@@ -1712,7 +1758,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}",
-            "description": "Rule 15: absolute value; logged delta = new − old = −6.",
+            "description": "**PUT /api/hq/outlets/:outletId/inventory/:menuItemId** — Set absolute stock (ADJUSTMENT log)\n\nRule 15: absolute value; logged delta = new − old = −6.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"quantity\": 4,\n  \"note\": \"Stock count: 6 spoiled\"\n}",
@@ -1738,7 +1784,7 @@
           ]
         },
         {
-          "name": "Adjust to same value → no log",
+          "name": "Adjust stock — same value → 200, no log",
           "request": {
             "method": "PUT",
             "header": [
@@ -1756,7 +1802,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PUT /api/hq/outlets/:outletId/inventory/:menuItemId** — Set absolute stock (ADJUSTMENT log)"
           },
           "event": [
             {
@@ -1773,12 +1820,12 @@
           ]
         },
         {
-          "name": "Logs (newest first, Σ = stock)",
+          "name": "Get stock logs — newest first, Σ = stock → 200",
           "request": {
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs",
-            "description": "Invariant: sum of quantityChange = current quantity (4)."
+            "description": "**GET /api/hq/outlets/:outletId/inventory/:menuItemId/logs** — Stock movement history, newest first\n\nInvariant: sum of quantityChange = current quantity (4)."
           },
           "event": [
             {
@@ -1796,11 +1843,12 @@
           ]
         },
         {
-          "name": "Logs ?limit=1",
+          "name": "Get stock logs — limit=1 → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=1"
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=1",
+            "description": "**GET /api/hq/outlets/:outletId/inventory/:menuItemId/logs** — Stock movement history, newest first"
           },
           "event": [
             {
@@ -1816,7 +1864,7 @@
           ]
         },
         {
-          "name": "Restock quantity 0 → 400",
+          "name": "Restock item — quantity 0 → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -1834,7 +1882,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock** — Add stock (RESTOCK log)"
           },
           "event": [
             {
@@ -1850,7 +1899,7 @@
           ]
         },
         {
-          "name": "Restock negative → 400",
+          "name": "Restock item — negative quantity → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -1868,7 +1917,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock** — Add stock (RESTOCK log)"
           },
           "event": [
             {
@@ -1884,7 +1934,7 @@
           ]
         },
         {
-          "name": "Restock decimal → 400",
+          "name": "Restock item — decimal quantity → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -1902,7 +1952,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock** — Add stock (RESTOCK log)"
           },
           "event": [
             {
@@ -1918,7 +1969,7 @@
           ]
         },
         {
-          "name": "Restock as string → 400",
+          "name": "Restock item — quantity as string → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -1936,7 +1987,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock** — Add stock (RESTOCK log)"
           },
           "event": [
             {
@@ -1952,7 +2004,7 @@
           ]
         },
         {
-          "name": "Restock over cap → 400",
+          "name": "Restock item — over 1,000,000 cap → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -1970,7 +2022,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock** — Add stock (RESTOCK log)"
           },
           "event": [
             {
@@ -1986,7 +2039,7 @@
           ]
         },
         {
-          "name": "Adjust negative → 400",
+          "name": "Adjust stock — negative quantity → 400",
           "request": {
             "method": "PUT",
             "header": [
@@ -2004,7 +2057,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PUT /api/hq/outlets/:outletId/inventory/:menuItemId** — Set absolute stock (ADJUSTMENT log)"
           },
           "event": [
             {
@@ -2020,7 +2074,7 @@
           ]
         },
         {
-          "name": "Adjust unknown key → 400",
+          "name": "Adjust stock — unknown field → 400",
           "request": {
             "method": "PUT",
             "header": [
@@ -2038,7 +2092,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PUT /api/hq/outlets/:outletId/inventory/:menuItemId** — Set absolute stock (ADJUSTMENT log)"
           },
           "event": [
             {
@@ -2054,7 +2109,7 @@
           ]
         },
         {
-          "name": "Restock unassigned item → 404",
+          "name": "Restock item — item not assigned → 404",
           "request": {
             "method": "POST",
             "header": [
@@ -2072,7 +2127,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock** — Add stock (RESTOCK log)"
           },
           "event": [
             {
@@ -2088,7 +2144,7 @@
           ]
         },
         {
-          "name": "Adjust unassigned item → 404",
+          "name": "Adjust stock — item not assigned → 404",
           "request": {
             "method": "PUT",
             "header": [
@@ -2106,7 +2162,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PUT /api/hq/outlets/:outletId/inventory/:menuItemId** — Set absolute stock (ADJUSTMENT log)"
           },
           "event": [
             {
@@ -2122,11 +2179,12 @@
           ]
         },
         {
-          "name": "Logs of unassigned item → 404",
+          "name": "Get stock logs — item not assigned → 404",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{inactiveItemId}}/logs"
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{inactiveItemId}}/logs",
+            "description": "**GET /api/hq/outlets/:outletId/inventory/:menuItemId/logs** — Stock movement history, newest first"
           },
           "event": [
             {
@@ -2142,7 +2200,7 @@
           ]
         },
         {
-          "name": "Restock on unknown outlet → 404",
+          "name": "Restock item — unknown outlet → 404",
           "request": {
             "method": "POST",
             "header": [
@@ -2160,7 +2218,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock** — Add stock (RESTOCK log)"
           },
           "event": [
             {
@@ -2176,11 +2235,12 @@
           ]
         },
         {
-          "name": "Inventory of unknown outlet → 404",
+          "name": "List inventory — unknown outlet → 404",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/999999/inventory"
+            "url": "{{baseUrl}}/api/hq/outlets/999999/inventory",
+            "description": "**GET /api/hq/outlets/:outletId/inventory** — Stock per assigned item"
           },
           "event": [
             {
@@ -2196,11 +2256,12 @@
           ]
         },
         {
-          "name": "Logs ?limit=0 → 400",
+          "name": "Get stock logs — limit=0 → 400",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=0"
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=0",
+            "description": "**GET /api/hq/outlets/:outletId/inventory/:menuItemId/logs** — Stock movement history, newest first"
           },
           "event": [
             {
@@ -2216,11 +2277,12 @@
           ]
         },
         {
-          "name": "Logs ?limit=201 → 400",
+          "name": "Get stock logs — limit=201 → 400",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=201"
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=201",
+            "description": "**GET /api/hq/outlets/:outletId/inventory/:menuItemId/logs** — Stock movement history, newest first"
           },
           "event": [
             {
@@ -2238,15 +2300,16 @@
       ]
     },
     {
-      "name": "6. Outlet menu",
-      "description": "Rules 7–9: only assigned + available + active items, effective price, sorted by name. Outlet-facing (POS).",
+      "name": "5. Outlet menu",
+      "description": "Rules 7–9: only assigned + available + active items, effective price, sorted by name. Outlet-facing (POS).\n\nEndpoints used:\n- GET /api/hq/outlets — List all outlets\n- GET /api/outlets/:outletId/menu — Outlet's sellable menu (POS)\n- PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId — Set priceOverride / isAvailable\n- PATCH /api/hq/menu-items/:id — Update name / basePrice / isActive\n- POST /api/hq/outlets — Create an outlet (+ receipt counter)",
       "item": [
         {
-          "name": "Find seeded outlets (DHA/GUL/UTT)",
+          "name": "List outlets — find seeded DHA/GUL/UTT ids → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets"
+            "url": "{{baseUrl}}/api/hq/outlets",
+            "description": "**GET /api/hq/outlets** — List all outlets"
           },
           "event": [
             {
@@ -2264,11 +2327,12 @@
           ]
         },
         {
-          "name": "DHA menu (inactive Lassi hidden)",
+          "name": "Get outlet menu — DHA: inactive Lassi hidden → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{dhaOutletId}}/menu"
+            "url": "{{baseUrl}}/api/outlets/{{dhaOutletId}}/menu",
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)"
           },
           "event": [
             {
@@ -2285,11 +2349,12 @@
           ]
         },
         {
-          "name": "GUL menu (override 80, unavailable Puri hidden)",
+          "name": "Get outlet menu — GUL: override 80, unavailable Puri hidden → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{gulOutletId}}/menu"
+            "url": "{{baseUrl}}/api/outlets/{{gulOutletId}}/menu",
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)"
           },
           "event": [
             {
@@ -2305,11 +2370,12 @@
           ]
         },
         {
-          "name": "UTT menu (override 35)",
+          "name": "Get outlet menu — UTT: override 35 → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{uttOutletId}}/menu"
+            "url": "{{baseUrl}}/api/outlets/{{uttOutletId}}/menu",
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)"
           },
           "event": [
             {
@@ -2325,12 +2391,12 @@
           ]
         },
         {
-          "name": "Test outlet menu shows the test item",
+          "name": "Get outlet menu — test outlet shows test item → 200",
           "request": {
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu",
-            "description": "Item from folder 3 (basePrice 19.99, stock 4 after folder 5)."
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)\n\nItem from folder 3 (basePrice 19.99, stock 4 after folder 4)."
           },
           "event": [
             {
@@ -2347,7 +2413,7 @@
           ]
         },
         {
-          "name": "Set override 12 (HQ)",
+          "name": "Update assignment — set priceOverride 12 → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -2365,7 +2431,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -2380,11 +2447,12 @@
           ]
         },
         {
-          "name": "Menu uses the override price",
+          "name": "Get outlet menu — uses override price 12 → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu"
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu",
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)"
           },
           "event": [
             {
@@ -2400,7 +2468,7 @@
           ]
         },
         {
-          "name": "Clear override (HQ)",
+          "name": "Update assignment — clear priceOverride → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -2418,7 +2486,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -2433,7 +2502,7 @@
           ]
         },
         {
-          "name": "Unassign item (HQ isAvailable=false)",
+          "name": "Update assignment — unassign (isAvailable=false) → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -2451,7 +2520,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -2466,11 +2536,12 @@
           ]
         },
         {
-          "name": "Menu hides unavailable item",
+          "name": "Get outlet menu — hides unavailable item → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu"
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu",
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)"
           },
           "event": [
             {
@@ -2486,7 +2557,7 @@
           ]
         },
         {
-          "name": "Re-enable item (HQ isAvailable=true)",
+          "name": "Update assignment — re-enable (isAvailable=true) → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -2504,7 +2575,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -2519,7 +2591,7 @@
           ]
         },
         {
-          "name": "Deactivate master item (HQ isActive=false)",
+          "name": "Update menu item — deactivate (isActive=false) → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -2537,7 +2609,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/menu-items/:id** — Update name / basePrice / isActive"
           },
           "event": [
             {
@@ -2552,11 +2625,12 @@
           ]
         },
         {
-          "name": "Menu hides inactive item",
+          "name": "Get outlet menu — hides inactive item → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu"
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu",
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)"
           },
           "event": [
             {
@@ -2572,7 +2646,7 @@
           ]
         },
         {
-          "name": "Reactivate master item (HQ isActive=true)",
+          "name": "Update menu item — reactivate (isActive=true) → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -2590,7 +2664,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/menu-items/:id** — Update name / basePrice / isActive"
           },
           "event": [
             {
@@ -2605,11 +2680,12 @@
           ]
         },
         {
-          "name": "Menu shows item again",
+          "name": "Get outlet menu — shows item again → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu"
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/menu",
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)"
           },
           "event": [
             {
@@ -2625,7 +2701,7 @@
           ]
         },
         {
-          "name": "Create outlet with no items",
+          "name": "Create outlet — empty outlet (no items) → 201",
           "request": {
             "method": "POST",
             "header": [
@@ -2643,7 +2719,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets** — Create an outlet (+ receipt counter)"
           },
           "event": [
             {
@@ -2669,12 +2746,12 @@
           ]
         },
         {
-          "name": "Empty menu → 200 []",
+          "name": "Get outlet menu — outlet with no items → 200 []",
           "request": {
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/api/outlets/{{emptyOutletId}}/menu",
-            "description": "Outlet exists but sells nothing yet: 200 with an empty list, not 404."
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)\n\nOutlet exists but sells nothing yet: 200 with an empty list, not 404."
           },
           "event": [
             {
@@ -2690,11 +2767,12 @@
           ]
         },
         {
-          "name": "Unknown outlet → 404",
+          "name": "Get outlet menu — unknown outlet → 404",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/999999/menu"
+            "url": "{{baseUrl}}/api/outlets/999999/menu",
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)"
           },
           "event": [
             {
@@ -2710,11 +2788,12 @@
           ]
         },
         {
-          "name": "Bad outlet id → 400",
+          "name": "Get outlet menu — outlet id \"abc\" → 400",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/abc/menu"
+            "url": "{{baseUrl}}/api/outlets/abc/menu",
+            "description": "**GET /api/outlets/:outletId/menu** — Outlet's sellable menu (POS)"
           },
           "event": [
             {
@@ -2732,11 +2811,11 @@
       ]
     },
     {
-      "name": "7. Sales",
-      "description": "Rules 17–28: one transaction, server prices, atomic stock, gapless receipts per outlet, clientId idempotency. Uses the test outlet/item (19.99, stock 4).",
+      "name": "6. Sales",
+      "description": "Rules 17–28: one transaction, server prices, atomic stock, gapless receipts per outlet, clientId idempotency. Uses the test outlet/item (19.99, stock 4).\n\nEndpoints used:\n- POST /api/outlets/:outletId/sales — Create a sale (POS)\n- POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock — Add stock (RESTOCK log)\n- GET /api/hq/outlets/:outletId/inventory/:menuItemId/logs — Stock movement history, newest first\n- GET /api/outlets/:outletId/sales/:saleId — Get a sale with items (receipt view)\n- GET /api/hq/outlets/:outletId/inventory — Stock per assigned item\n- PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId — Set priceOverride / isAvailable",
       "item": [
         {
-          "name": "Sell 2 → 201, receipt 000001",
+          "name": "Create sale — 2 units → 201, receipt 000001",
           "request": {
             "method": "POST",
             "header": [
@@ -2746,7 +2825,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
-            "description": "Price comes from the server (19.99), total = 2 × 19.99. First sale of a new outlet → CODE-000001.",
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)\n\nPrice comes from the server (19.99), total = 2 × 19.99. First sale of a new outlet → CODE-000001.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 2 }\n  ]\n}",
@@ -2774,7 +2853,7 @@
           ]
         },
         {
-          "name": "Duplicate lines merged → 1 line qty 2",
+          "name": "Create sale — duplicate lines merged into 1 (qty 2) → 201",
           "request": {
             "method": "POST",
             "header": [
@@ -2784,7 +2863,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
-            "description": "Rule 18: two lines of the same item become one line.",
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)\n\nRule 18: two lines of the same item become one line.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 },\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ]\n}",
@@ -2810,7 +2889,7 @@
           ]
         },
         {
-          "name": "Out of stock → 409 INSUFFICIENT_STOCK",
+          "name": "Create sale — out of stock → 409 INSUFFICIENT_STOCK",
           "request": {
             "method": "POST",
             "header": [
@@ -2820,7 +2899,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
-            "description": "Rule 20: stock is now 0; whole sale fails, nothing changes, no receipt number used.",
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)\n\nRule 20: stock is now 0; whole sale fails, nothing changes, no receipt number used.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ]\n}",
@@ -2846,7 +2925,7 @@
           ]
         },
         {
-          "name": "Restock 5 (HQ)",
+          "name": "Restock item — +5 → 200",
           "request": {
             "method": "POST",
             "header": [
@@ -2864,7 +2943,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets/:outletId/inventory/:menuItemId/restock** — Add stock (RESTOCK log)"
           },
           "event": [
             {
@@ -2880,7 +2960,7 @@
           ]
         },
         {
-          "name": "Next sale → 000003 (failed sale used no number)",
+          "name": "Create sale — after a failed sale → 201, receipt 000003 (no gap)",
           "request": {
             "method": "POST",
             "header": [
@@ -2890,7 +2970,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
-            "description": "Rule 28: the 409 above rolled back, so numbering continues without a gap.",
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)\n\nRule 28: the 409 above rolled back, so numbering continues without a gap.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ]\n}",
@@ -2915,12 +2995,12 @@
           ]
         },
         {
-          "name": "SALE log written with saleId",
+          "name": "Get stock logs — latest is SALE log with saleId → 200",
           "request": {
             "method": "GET",
             "header": [],
             "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=1",
-            "description": "Rule 23: SALE log −1, balanceAfter 4."
+            "description": "**GET /api/hq/outlets/:outletId/inventory/:menuItemId/logs** — Stock movement history, newest first\n\nRule 23: SALE log −1, balanceAfter 4."
           },
           "event": [
             {
@@ -2936,11 +3016,12 @@
           ]
         },
         {
-          "name": "Get sale (receipt view)",
+          "name": "Get sale — receipt view → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales/{{saleId}}"
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales/{{saleId}}",
+            "description": "**GET /api/outlets/:outletId/sales/:saleId** — Get a sale with items (receipt view)"
           },
           "event": [
             {
@@ -2957,11 +3038,12 @@
           ]
         },
         {
-          "name": "Get sale from another outlet → 404",
+          "name": "Get sale — via another outlet → 404",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{gulOutletId}}/sales/{{saleId}}"
+            "url": "{{baseUrl}}/api/outlets/{{gulOutletId}}/sales/{{saleId}}",
+            "description": "**GET /api/outlets/:outletId/sales/:saleId** — Get a sale with items (receipt view)"
           },
           "event": [
             {
@@ -2977,11 +3059,12 @@
           ]
         },
         {
-          "name": "Get sale 999999 → 404",
+          "name": "Get sale — unknown sale → 404",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales/999999"
+            "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales/999999",
+            "description": "**GET /api/outlets/:outletId/sales/:saleId** — Get a sale with items (receipt view)"
           },
           "event": [
             {
@@ -2997,11 +3080,12 @@
           ]
         },
         {
-          "name": "Get sale on unknown outlet → 404",
+          "name": "Get sale — unknown outlet → 404",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/outlets/999999/sales/{{saleId}}"
+            "url": "{{baseUrl}}/api/outlets/999999/sales/{{saleId}}",
+            "description": "**GET /api/outlets/:outletId/sales/:saleId** — Get a sale with items (receipt view)"
           },
           "event": [
             {
@@ -3017,7 +3101,7 @@
           ]
         },
         {
-          "name": "Sale with clientId → 201",
+          "name": "Create sale — with clientId → 201",
           "request": {
             "method": "POST",
             "header": [
@@ -3027,7 +3111,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
-            "description": "Rule 25: offline POS sends its own UUID as clientId.",
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)\n\nRule 25: offline POS sends its own UUID as clientId.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ],\n  \"clientId\": \"{{clientId}}\"\n}",
@@ -3062,7 +3146,7 @@
           ]
         },
         {
-          "name": "Same clientId again → 200, same sale",
+          "name": "Create sale — same clientId again → 200, same sale",
           "request": {
             "method": "POST",
             "header": [
@@ -3072,7 +3156,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
-            "description": "Re-sent offline sale: returns the existing sale, no second sale, no extra stock deduction.",
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)\n\nRe-sent offline sale: returns the existing sale, no second sale, no extra stock deduction.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [\n    { \"menuItemId\": {{menuItemId}}, \"quantity\": 1 }\n  ],\n  \"clientId\": \"{{clientId}}\"\n}",
@@ -3097,11 +3181,12 @@
           ]
         },
         {
-          "name": "Stock deducted once (3 left)",
+          "name": "List inventory — stock deducted once (3 left) → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory"
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory",
+            "description": "**GET /api/hq/outlets/:outletId/inventory** — Stock per assigned item"
           },
           "event": [
             {
@@ -3117,7 +3202,7 @@
           ]
         },
         {
-          "name": "Same clientId on another outlet → 409",
+          "name": "Create sale — clientId used by another outlet → 409",
           "request": {
             "method": "POST",
             "header": [
@@ -3135,7 +3220,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)"
           },
           "event": [
             {
@@ -3151,7 +3237,7 @@
           ]
         },
         {
-          "name": "Item not assigned → 404",
+          "name": "Create sale — item not assigned → 404",
           "request": {
             "method": "POST",
             "header": [
@@ -3169,7 +3255,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)"
           },
           "event": [
             {
@@ -3185,7 +3272,7 @@
           ]
         },
         {
-          "name": "Make item unavailable (HQ)",
+          "name": "Update assignment — set unavailable → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -3203,7 +3290,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -3218,7 +3306,7 @@
           ]
         },
         {
-          "name": "Unavailable item → 400 ITEM_NOT_SELLABLE",
+          "name": "Create sale — unavailable item → 400 ITEM_NOT_SELLABLE",
           "request": {
             "method": "POST",
             "header": [
@@ -3236,7 +3324,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)"
           },
           "event": [
             {
@@ -3253,7 +3342,7 @@
           ]
         },
         {
-          "name": "Re-enable item (HQ)",
+          "name": "Update assignment — re-enable → 200",
           "request": {
             "method": "PATCH",
             "header": [
@@ -3271,7 +3360,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**PATCH /api/hq/outlets/:outletId/menu-items/:menuItemId** — Set priceOverride / isAvailable"
           },
           "event": [
             {
@@ -3286,7 +3376,7 @@
           ]
         },
         {
-          "name": "Unknown outlet → 404",
+          "name": "Create sale — unknown outlet → 404",
           "request": {
             "method": "POST",
             "header": [
@@ -3304,7 +3394,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)"
           },
           "event": [
             {
@@ -3320,7 +3411,7 @@
           ]
         },
         {
-          "name": "Empty items → 400",
+          "name": "Create sale — empty items → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -3338,7 +3429,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)"
           },
           "event": [
             {
@@ -3354,7 +3446,7 @@
           ]
         },
         {
-          "name": "Quantity 0 → 400",
+          "name": "Create sale — quantity 0 → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -3372,7 +3464,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)"
           },
           "event": [
             {
@@ -3388,7 +3481,7 @@
           ]
         },
         {
-          "name": "Client-sent unitPrice → 400",
+          "name": "Create sale — client-sent unitPrice → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -3398,7 +3491,7 @@
               }
             ],
             "url": "{{baseUrl}}/api/outlets/{{outletId}}/sales",
-            "description": "Rule 21: prices are never taken from the client.",
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)\n\nRule 21: prices are never taken from the client.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"items\": [ { \"menuItemId\": {{menuItemId}}, \"quantity\": 1, \"unitPrice\": 0.01 } ]\n}",
@@ -3423,7 +3516,7 @@
           ]
         },
         {
-          "name": "Bad clientId (not a UUID) → 400",
+          "name": "Create sale — clientId not a UUID → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -3441,7 +3534,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)"
           },
           "event": [
             {
@@ -3457,7 +3551,7 @@
           ]
         },
         {
-          "name": "51 lines → 400",
+          "name": "Create sale — 51 lines (max 50) → 400",
           "request": {
             "method": "POST",
             "header": [
@@ -3475,7 +3569,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/outlets/:outletId/sales** — Create a sale (POS)"
           },
           "event": [
             {
@@ -3493,15 +3588,392 @@
       ]
     },
     {
-      "name": "9. Global errors",
-      "description": "Handled by notFound + errorHandler.",
+      "name": "7. Reports",
       "item": [
         {
-          "name": "Unknown route → 404",
+          "name": "Revenue by outlet — all outlets, money as string → 200",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{baseUrl}}/api/unknown"
+            "url": "{{baseUrl}}/api/hq/reports/revenue-by-outlet",
+            "description": "**GET /api/hq/reports/revenue-by-outlet** — Total revenue + sale count per outlet\n\nRule 29: every outlet, including ones with no sales. Test outlet numbers come from folder 6 (2 + 2 + 1 + 1 units at 19.99)."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test(\"every row has the shape\", () => d.forEach((r) => { pm.expect(r).to.have.keys([\"outletId\", \"code\", \"name\", \"totalRevenue\", \"saleCount\"]); pm.expect(r.totalRevenue).to.match(/^d+.d{2}$/); }));",
+                  "pm.test(\"sorted by revenue desc\", () => { for (let i = 1; i < d.length; i++) pm.expect(Number(d[i - 1].totalRevenue)).to.be.at.least(Number(d[i].totalRevenue)); });",
+                  "const o = pm.response.json().data.find((x) => x.outletId === Number(pm.collectionVariables.get(\"outletId\")));",
+                  "pm.test(\"test outlet: 4 sales, 6 × 19.99 = 119.94\", () => pm.expect([o.totalRevenue, o.saleCount]).to.eql([\"119.94\", 4]));",
+                  "const e = d.find((x) => x.outletId === Number(pm.collectionVariables.get(\"emptyOutletId\")));",
+                  "pm.test(\"outlet with no sales → 0.00 / 0\", () => pm.expect([e.totalRevenue, e.saleCount]).to.eql([\"0.00\", 0]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revenue by outlet — from = to = today (inclusive) → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/revenue-by-outlet?from={{today}}&to={{today}}",
+            "description": "**GET /api/hq/reports/revenue-by-outlet** — Total revenue + sale count per outlet\n\nRule 30: ISO dates, inclusive, UTC."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"today\", new Date().toISOString().slice(0, 10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const o = pm.response.json().data.find((x) => x.outletId === Number(pm.collectionVariables.get(\"outletId\")));",
+                  "pm.test(\"today's sales counted (to is inclusive)\", () => pm.expect([o.totalRevenue, o.saleCount]).to.eql([\"119.94\", 4]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revenue by outlet — to=2000-01-01 → 200, all 0.00",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/revenue-by-outlet?to=2000-01-01",
+            "description": "**GET /api/hq/reports/revenue-by-outlet** — Total revenue + sale count per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"no sales before 2000 → all 0.00 / 0\", () => pm.response.json().data.forEach((r) => pm.expect([r.totalRevenue, r.saleCount]).to.eql([\"0.00\", 0])));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revenue by outlet — from > to → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/revenue-by-outlet?from=2026-11-23&to=2026-11-22",
+            "description": "**GET /api/hq/reports/revenue-by-outlet** — Total revenue + sale count per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revenue by outlet — invalid date 2026-13-01 → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/revenue-by-outlet?from=2026-13-01",
+            "description": "**GET /api/hq/reports/revenue-by-outlet** — Total revenue + sale count per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Revenue by outlet — non-ISO date → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/revenue-by-outlet?from=22-11-2026",
+            "description": "**GET /api/hq/reports/revenue-by-outlet** — Total revenue + sale count per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — all outlets → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet\n\nRule 31: top 5 per outlet (ROW_NUMBER() OVER PARTITION BY outlet). Ties: revenue desc, then name."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test(\"≤ 5 items per outlet\", () => d.forEach((o) => pm.expect(o.items.length).to.be.at.most(5)));",
+                  "pm.test(\"items sorted: qty desc, revenue desc, name asc\", () => d.forEach((o) => { for (let i = 1; i < o.items.length; i++) { const a = o.items[i - 1], b = o.items[i]; const ok = a.qtySold > b.qtySold || (a.qtySold === b.qtySold && (Number(a.revenue) > Number(b.revenue) || (a.revenue === b.revenue && a.name <= b.name))); pm.expect(ok, `${a.name} before ${b.name}`).to.be.true; } }));",
+                  "const o = pm.response.json().data.find((x) => x.outletId === Number(pm.collectionVariables.get(\"outletId\")));",
+                  "pm.test(\"test outlet: item qty 6, revenue 119.94\", () => { const i = o.items.find((x) => x.menuItemId === Number(pm.collectionVariables.get(\"menuItemId\"))); pm.expect([i.qtySold, i.revenue]).to.eql([6, \"119.94\"]); });",
+                  "const e = d.find((x) => x.outletId === Number(pm.collectionVariables.get(\"emptyOutletId\")));",
+                  "pm.test(\"outlet with no sales → items []\", () => pm.expect(e.items).to.eql([]));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — one outlet (outletId) → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items?outletId={{outletId}}",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const d = pm.response.json().data;",
+                  "pm.test(\"only that outlet\", () => { pm.expect(d.length).to.eql(1); pm.expect(d[0].outletId).to.eql(Number(pm.collectionVariables.get(\"outletId\"))); });",
+                  "pm.test(\"code included\", () => pm.expect(d[0].code).to.eql(pm.collectionVariables.get(\"outletCode\").toUpperCase()));",
+                  "pm.test(\"item shape\", () => d[0].items.forEach((i) => pm.expect(i).to.have.keys([\"menuItemId\", \"name\", \"qtySold\", \"revenue\"])));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — limit=1 → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items?limit=1",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"≤ 1 item per outlet\", () => pm.response.json().data.forEach((o) => pm.expect(o.items.length).to.be.at.most(1)));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — from = to = today → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items?outletId={{outletId}}&from={{today}}&to={{today}}",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet"
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.collectionVariables.set(\"today\", new Date().toISOString().slice(0, 10));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"today's item counted\", () => pm.expect(pm.response.json().data[0].items[0].qtySold).to.eql(6));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — outlet with no sales → 200, items []",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items?outletId={{emptyOutletId}}",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"one outlet, items []\", () => { const d = pm.response.json().data; pm.expect(d.length).to.eql(1); pm.expect(d[0].items).to.eql([]); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — unknown outlet → 404",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items?outletId=999999",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 404\", () => pm.response.to.have.status(404));",
+                  "pm.test(\"error.code OUTLET_NOT_FOUND\", () => pm.expect(pm.response.json().error.code).to.eql(\"OUTLET_NOT_FOUND\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — outletId=abc → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items?outletId=abc",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — limit=0 → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items?limit=0",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — limit=51 → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items?limit=51",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Top items — from > to → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/reports/top-items?from=2026-11-23&to=2026-11-22",
+            "description": "**GET /api/hq/reports/top-items** — Top selling items per outlet"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"error.code VALIDATION_ERROR\", () => pm.expect(pm.response.json().error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "description": "Rules 29–31: revenue per outlet (outlets with no sales included) and top items per outlet (ROW_NUMBER), optional from/to (inclusive, UTC). Uses the 4 sales made in the Sales folder.\n\nEndpoints used:\n- GET /api/hq/reports/revenue-by-outlet — Total revenue + sale count per outlet\n- GET /api/hq/reports/top-items — Top selling items per outlet"
+    },
+    {
+      "name": "8. Global errors",
+      "description": "Handled by notFound + errorHandler.\n\nEndpoints used:\n- GET /api/unknown — Route that does not exist\n- POST /api/hq/outlets — Create an outlet (+ receipt counter)",
+      "item": [
+        {
+          "name": "Unknown route → 404 ROUTE_NOT_FOUND",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/unknown",
+            "description": "**GET /api/unknown** — Route that does not exist"
           },
           "event": [
             {
@@ -3517,7 +3989,7 @@
           ]
         },
         {
-          "name": "Broken JSON → 400",
+          "name": "Create outlet — broken JSON body → 400 INVALID_JSON",
           "request": {
             "method": "POST",
             "header": [
@@ -3535,7 +4007,8 @@
                   "language": "json"
                 }
               }
-            }
+            },
+            "description": "**POST /api/hq/outlets** — Create an outlet (+ receipt counter)"
           },
           "event": [
             {
