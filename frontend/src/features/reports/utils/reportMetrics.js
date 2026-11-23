@@ -40,12 +40,11 @@ export function calculatePercentChange(currentValue, previousValue) {
  * @property {number} rank
  * @property {number} revenueAmount
  * @property {number} orderCount
- * @property {number} revenueSharePercent   Share of all outlets' revenue (sums to 100)
- * @property {number} barWidthPercent       Relative to the top outlet, for the ranked bar
+ * @property {number} revenueSharePercent   Share of all outlets' revenue (sums to 100), also the bar width
  */
 
 /**
- * Sorted by revenue (highest first), with share of total and bar width.
+ * Sorted by revenue (highest first), with share of total.
  * @param {import('../api/reportsApi').OutletRevenue[]} revenueRows
  * @returns {RankedRevenueRow[]}
  */
@@ -54,7 +53,6 @@ export function rankRevenueRows(revenueRows) {
   const sortedRevenueRows = [...revenueRows].sort(
     (firstRow, secondRow) => toAmount(secondRow.totalRevenue) - toAmount(firstRow.totalRevenue),
   );
-  const highestOutletRevenue = toAmount(sortedRevenueRows[0]?.totalRevenue);
 
   return sortedRevenueRows.map((revenueRow, rowIndex) => {
     const revenueAmount = toAmount(revenueRow.totalRevenue);
@@ -66,7 +64,6 @@ export function rankRevenueRows(revenueRows) {
       revenueAmount,
       orderCount: toAmount(revenueRow.saleCount),
       revenueSharePercent: totalRevenue ? (revenueAmount / totalRevenue) * 100 : 0,
-      barWidthPercent: highestOutletRevenue ? (revenueAmount / highestOutletRevenue) * 100 : 0,
     };
   });
 }

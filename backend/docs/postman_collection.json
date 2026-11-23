@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "F&B HQ API",
-    "description": "Health, outlets, master menu, assignments, inventory, outlet menu, sales, reports. Run top to bottom (Collection Runner) — later requests use ids saved by earlier ones. Each run creates new test rows (no DELETE API by design). Needs the seed (npm run db:seed) for DHA/GUL/UTT checks.",
+    "description": "Health, outlets, master menu, assignments, inventory, outlet menu, sales, reports, live events (SSE). Run top to bottom (Collection Runner) — later requests use ids saved by earlier ones. Each run creates new test rows (no DELETE API by design). Deselect folder 9 (SSE stream, never ends) in the Runner and send it by hand. Needs the seed (npm run db:seed) for DHA/GUL/UTT checks.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -4022,6 +4022,26 @@
               }
             }
           ]
+        }
+      ]
+    },
+    {
+      "name": "9. Live events (SSE)",
+      "description": "Server-Sent Events stream for HQ screens.\n\nEndpoints used:\n- GET /api/hq/events — live sale.created events\n\n**Send manually. Deselect this folder in the Collection Runner:** the stream never ends, so the Runner would wait forever.",
+      "item": [
+        {
+          "name": "Live events stream — open, then make a sale",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "text/event-stream"
+              }
+            ],
+            "url": "{{baseUrl}}/api/hq/events",
+            "description": "**GET /api/hq/events** — Server-Sent Events (text/event-stream)\n\n1. Send this request. The stream stays open and shows `retry: 5000` and `: connected`.\n2. Create a sale (folder 6, e.g. the first POST /sales) in another tab.\n3. The stream receives:\n\n```\nevent: sale.created\ndata: {\"outletId\":1,\"receiptNo\":\"DHA-000001\"}\n```\n\nNo event for an idempotent replay (same clientId → 200) or a failed sale (409/400/404). A `: heartbeat` comment arrives every 25 s. Cancel the request to disconnect.\n\nCLI alternative: `curl -N {{baseUrl}}/api/hq/events`"
+          }
         }
       ]
     }

@@ -7,6 +7,7 @@ const menuModule = require("../menu");
 const inventoryModule = require("../inventory");
 const AppError = require("../../shared/utils/AppError");
 const { toMoney } = require("../../shared/utils/money");
+const eventBus = require("../../shared/events/eventBus");
 
 // Waiting for row locks under load is normal; don't fail a sale because the pool/locks are briefly busy.
 const TX_OPTIONS = { maxWait: 5000, timeout: 10000 };
@@ -151,6 +152,9 @@ async function createSale(outletId, { items, clientId }) {
 
       return created;
     }, TX_OPTIONS);
+
+    // Only here: the tx has committed. Replays (pre-check and P2002 race) and failed sales never reach this line.
+    eventBus.publish(eventBus.EVENTS.SALE_CREATED, { outletId, receiptNo: sale.receiptNumber });
 
     return { sale: toSaleDto(sale), replayed: false };
   } catch (err) {

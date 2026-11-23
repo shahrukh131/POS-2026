@@ -83,6 +83,12 @@ history grows.
 - **Observability**: structured JSON logs (replace `morgan`), request IDs, metrics (p95 latency, 409 `INSUFFICIENT_STOCK`
   rate, transaction wait time), alerts on 5xx and DB saturation.
 - **Secrets** come from the platform's secret store, never from files.
+- **Live updates (SSE) across instances**: `GET /api/hq/events` is fed by an in-process `EventEmitter`
+  (`src/shared/events/eventBus.js`). With N instances, a sale on instance A would not reach HQ browsers connected to
+  instance B. Fix: `eventBus.publish` sends to **Redis pub/sub** (channel `sale.created`). Every instance subscribes once and
+  forwards to its own SSE clients. Alternatives are Postgres `LISTEN/NOTIFY` (no new infra) or the outbox → broker from §4.
+  The endpoint and frontend stay the same. The load balancer must allow long-lived HTTP connections (no response buffering,
+  idle timeout > the 25 s heartbeat).
 
 ## 6. Architectural evolution
 

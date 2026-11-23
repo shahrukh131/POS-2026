@@ -16,7 +16,7 @@ import { cn } from '@/lib/utils';
 import { formatPercent } from '../utils/reportMetrics';
 
 /**
- * Outlets ranked by revenue, with share of total and a one-hue ranked bar (scaled to the top outlet).
+ * Outlets ranked by revenue, with share of total and a one-hue bar whose length is that share.
  *
  * @param {{
  *   queryState: import('@tanstack/react-query').UseQueryResult,
@@ -32,7 +32,7 @@ export function RevenueByOutletCard({ queryState, rankedRevenueRows, revenueSumm
     <Card className="mb-8 gap-0 pb-0">
       <CardHeader className="pb-4">
         <CardTitle>Revenue by outlet</CardTitle>
-        <CardDescription>Ranked by revenue. Bars are relative to the top outlet.</CardDescription>
+        <CardDescription>Ranked by revenue. Bars show each outlet's share of total revenue.</CardDescription>
       </CardHeader>
       <QueryStateBoundary
         queryState={queryState}
@@ -49,7 +49,7 @@ export function RevenueByOutletCard({ queryState, rankedRevenueRows, revenueSumm
               <TableHead className="text-right">Revenue</TableHead>
               <TableHead className="text-right">Share</TableHead>
               <TableHead className="hidden w-[30%] md:table-cell">
-                <span className="sr-only">Revenue compared with the top outlet</span>
+                <span className="sr-only">Share of total revenue</span>
               </TableHead>
             </TableRow>
           </TableHeader>
@@ -99,7 +99,7 @@ function RevenueRow({ rankedRow }) {
             <div className="flex h-6 cursor-default items-center" tabIndex={0} aria-label={`${rankedRow.outletName} revenue bar`}>
               <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
                 {hasRevenue && (
-                  <div className="h-full rounded-full bg-brand" style={{ width: `${rankedRow.barWidthPercent}%` }} />
+                  <div className="h-full rounded-full bg-brand" style={{ width: `${rankedRow.revenueSharePercent}%` }} />
                 )}
               </div>
             </div>

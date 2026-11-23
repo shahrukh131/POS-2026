@@ -1,11 +1,15 @@
 import { Suspense } from 'react';
 import { Outlet } from 'react-router-dom';
 import { LoadingState } from '@/components/common/LoadingState';
+import { useLiveReports } from '@/features/reports/hooks/useLiveReports';
 import { AppFooter } from './components/AppFooter';
 import { AppHeader } from './components/AppHeader';
 import { HqSidebarNav } from './components/HqSidebarNav';
 
 export function HqLayout() {
+  // One SSE connection for all HQ screens: a sale anywhere refreshes the reports.
+  useLiveReports();
+
   return (
     // Column layout so the footer sits at the bottom even on short pages.
     <div className="flex min-h-screen flex-col">

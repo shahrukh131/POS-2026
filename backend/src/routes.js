@@ -4,6 +4,7 @@ const inventory = require("./modules/inventory");
 const menu = require("./modules/menu");
 const sales = require("./modules/sales");
 const reporting = require("./modules/reporting");
+const events = require("./modules/events");
 
 // HQ: /api/hq/*. Nested /outlets/:outletId/* routes go before the plain /outlets CRUD.
 const hq = Router();
@@ -11,6 +12,7 @@ hq.use(menu.hqRoutes);
 hq.use(inventory.hqRoutes);
 hq.use(outlet.hqRoutes);
 hq.use(reporting.hqRoutes); // /reports/*
+hq.use(events.hqRoutes); // /events (SSE)
 
 // /api
 const api = Router();

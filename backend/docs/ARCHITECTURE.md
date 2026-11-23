@@ -32,9 +32,11 @@ backend/
       menu/             master menu, outlet assignments, outlet-facing menu
       sales/            sales transaction + receipt numbering
       reporting/        HQ reports (read-only, raw SQL)
+      events/           GET /api/hq/events (Server-Sent Events for live HQ updates)
       health/           GET /health
     shared/
       db/prisma.js      single PrismaClient instance
+      events/eventBus.js  in-process EventEmitter (publish / subscribe)
       middleware/       validate, errorHandler, notFound
       utils/            AppError, response, money helpers
       validators/       common Zod pieces (id, money)
@@ -49,6 +51,7 @@ Inside a module, files are named `<name>.<layer>.js` (`sales.routes.js`, `sales.
 | `menu` | `menu_items`, `outlet_menu_items` | `hqRoutes`, `outletRoutes`, `findAssignmentsForSale` | outlet, inventory |
 | `sales` | `sales`, `sale_items` | `outletRoutes` | outlet, menu, inventory |
 | `reporting` | none (read-only) | `hqRoutes` | none (reads outlet, menu, sales tables directly) |
+| `events` | none (in-memory SSE streams) | `hqRoutes`, `closeAllStreams` | none (subscribes to `shared/events/eventBus`) |
 | `health` | none | `routes` | none |
 
 Rules:
@@ -58,6 +61,7 @@ Rules:
 - A module writes only the tables it owns. For example, assigning an item creates the inventory row through `inventory.initStock`.
 - No dependency cycles: `outlet ← inventory ← menu ← sales`. A new module (for example `reporting`) sits on top.
 - The receipt counter row is owned by `outlet` (created in the outlet's transaction). `sales/receipt.service.js` asks `outlet.nextReceiptNumber` and formats `CODE-000001`.
+- Events go through `shared/events/eventBus.js`, not through a module. `sales` publishes `sale.created` **after its transaction commits** (never on replays or failed sales), and `events` subscribes. Neither module requires the other.
 - Check: `grep -rnE 'require\("\.\./[a-z]+/[a-zA-Z]+\.(repository|service|routes|controller|validator)"\)' src/modules` must return nothing.
 
 Split points (read-only joins across module tables, to replace with API calls or read models if a module becomes a service):
@@ -103,6 +107,7 @@ Flow: `route → validate → controller → service → repository → DB`
 | GET | `/api/hq/outlets/:outletId/inventory/:menuItemId/logs?limit` | Stock movement history, newest first. `limit` 1–200, default 50. 404 `NOT_ASSIGNED` |
 | GET | `/api/hq/reports/revenue-by-outlet?from&to` | `[{ outletId, code, name, totalRevenue, saleCount }]`, all outlets (no sales → `"0.00"`, 0), sorted by revenue desc then id. `from`/`to` `YYYY-MM-DD` inclusive UTC; invalid or `from > to` → 400 `VALIDATION_ERROR`. 1 query |
 | GET | `/api/hq/reports/top-items?outletId&limit&from&to` | `[{ outletId, code, items: [{ menuItemId, name, qtySold, revenue }] }]`, top `limit` (1–50, default 5) per outlet by qty, ties: revenue desc, name asc. Omit `outletId` = all outlets; no sales → `items: []`. 404 `OUTLET_NOT_FOUND`. 1 query (`ROW_NUMBER() OVER (PARTITION BY outlet)`) |
+| GET | `/api/hq/events` | Server-Sent Events (`text/event-stream`). Sends `retry: 5000` and `: connected`, then `event: sale.created` / `data: { outletId, receiptNo }` after each committed sale (not on replays or failures), plus a `: heartbeat` comment every 25s. The listener is removed when the client disconnects, and all streams are closed on shutdown. In-process only (multi-instance → Redis pub/sub, see SCALING_AND_EVOLUTION.md) |
 | GET | `/api/outlets/:outletId/menu` | Outlet's sellable menu: assigned + `isAvailable` + `isActive` only. `[{ menuItemId, sku, name, price (effective), stock, inStock }]` sorted by name. Single JOIN query (1 round trip). 404 `OUTLET_NOT_FOUND` |
 | POST | `/api/outlets/:outletId/sales` | Create sale `{ items: [{ menuItemId, quantity 1..1000 }] (1–50), clientId?: uuid }`. **201** new sale, **200** replay of an existing `clientId`. 404 `OUTLET_NOT_FOUND` / `NOT_ASSIGNED`, 400 `ITEM_NOT_SELLABLE`, 409 `INSUFFICIENT_STOCK` (details: item, requested, available) / `CLIENT_ID_CONFLICT` |
 | GET | `/api/outlets/:outletId/sales/:saleId` | Sale with items (receipt view). 404 `SALE_NOT_FOUND` (also for another outlet's sale) / `OUTLET_NOT_FOUND` |

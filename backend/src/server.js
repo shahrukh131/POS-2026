@@ -3,6 +3,7 @@ require("dotenv").config({ quiet: true });
 
 const app = require("./app");
 const prisma = require("./shared/db/prisma");
+const events = require("./modules/events");
 
 const PORT = Number(process.env.PORT) || 3000;
 const SHUTDOWN_TIMEOUT_MS = 10_000;
@@ -30,6 +31,8 @@ async function shutdown(signal) {
   forceExit.unref();
 
   try {
+    // Open SSE streams would keep server.close() waiting until the force-exit timeout.
+    events.closeAllStreams();
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
     console.log("HTTP server closed");
     await prisma.$disconnect();

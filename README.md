@@ -140,6 +140,7 @@ request → route → validator (Zod) → controller → service → repository 
 | `menu` | `menu_items`, `outlet_menu_items` | outlet, inventory |
 | `sales` | `sales`, `sale_items` | outlet, menu, inventory |
 | `reporting` | — (read-only SQL) | — |
+| `events` | — (SSE stream for HQ) | shared event bus |
 | `health` | — | — |
 
 - Modules call each other **only through `modules/<x>/index.js`**. There are no dependency cycles (`outlet ← inventory ← menu ← sales`).
@@ -158,9 +159,9 @@ fnb-hq/
 │   ├── scripts/                concurrency-test.js, seed-if-empty.js
 │   └── src/
 │       ├── app.js, server.js, routes.js
-│       ├── modules/            outlet/ inventory/ menu/ sales/ reporting/ health/
+│       ├── modules/            outlet/ inventory/ menu/ sales/ reporting/ events/ health/
 │       │                       └── <name>.routes|validator|controller|service|repository.js + index.js
-│       └── shared/             db/prisma.js, middleware/, utils/ (AppError, money, response), validators/
+│       └── shared/             db/prisma.js, events/eventBus.js, middleware/, utils/ (AppError, money, response), validators/
 └── frontend/                   React (Vite) HQ screens + outlet POS
 ```
 
@@ -188,7 +189,7 @@ erDiagram
 
 Base URL: `http://localhost:4000` (manual setup) · `http://localhost:3000` (Docker) · `https://fnb-api-xm9u.onrender.com` (live).
 
-### Routes (21)
+### Routes (22)
 
 | # | Method | Path | Purpose |
 |---|---|---|---|
@@ -215,10 +216,11 @@ Base URL: `http://localhost:4000` (manual setup) · `http://localhost:3000` (Doc
 | **HQ: reports** | | | |
 | 17 | GET | `/api/hq/reports/revenue-by-outlet?from=&to=` | Revenue + sale count per outlet (`YYYY-MM-DD`, inclusive, UTC) |
 | 18 | GET | `/api/hq/reports/top-items?outletId=&limit=&from=&to=` | Top N (default 5) items per outlet by quantity |
+| 19 | GET | `/api/hq/events` | **Server-Sent Events** stream: `sale.created` after each committed sale ([§7](#real-time-report-updates-sse)) |
 | **Outlet** | | | |
-| 19 | GET | `/api/outlets/:outletId/menu` | Sellable menu: `{ menuItemId, sku, name, price, stock, inStock }` |
-| 20 | POST | `/api/outlets/:outletId/sales` | Create sale `{ items: [{ menuItemId, quantity }], clientId? }` |
-| 21 | GET | `/api/outlets/:outletId/sales/:saleId` | Sale with items (receipt view) |
+| 20 | GET | `/api/outlets/:outletId/menu` | Sellable menu: `{ menuItemId, sku, name, price, stock, inStock }` |
+| 21 | POST | `/api/outlets/:outletId/sales` | Create sale `{ items: [{ menuItemId, quantity }], clientId? }` |
+| 22 | GET | `/api/outlets/:outletId/sales/:saleId` | Sale with items (receipt view) |
 
 Full status codes and edge cases for each route: [ARCHITECTURE.md → Endpoints](backend/docs/ARCHITECTURE.md#endpoints).
 
@@ -240,10 +242,10 @@ Full status codes and edge cases for each route: [ARCHITECTURE.md → Endpoints]
 
 ### Postman
 
-[`backend/docs/postman_collection.json`](backend/docs/postman_collection.json) has 9 folders (Health → Global errors), with
+[`backend/docs/postman_collection.json`](backend/docs/postman_collection.json) has 10 folders (Health → Live events), with
 happy paths and error cases for every route. Import it, set the collection variable `baseUrl` (default
-`http://localhost:4000`), and run the folders **in order** with the Collection Runner. Later requests use IDs saved by
-earlier ones.
+`http://localhost:4000`), and run folders 0–8 **in order** with the Collection Runner. Later requests use IDs saved by
+earlier ones. **Deselect folder "9. Live events (SSE)" in the Runner**: the stream never ends. Send it by hand instead.
 
 ### Examples
 
@@ -318,6 +320,34 @@ The same `clientId` sent to a **different** outlet returns `409 CLIENT_ID_CONFLI
 parallel requests at a running API and checks for no oversell, gapless receipts per outlet, and exactly-once creation per `clientId`.
 See [§11](#11-testing).
 
+### Real-time report updates (SSE)
+
+HQ Reports update by themselves when any outlet makes a sale, with no reload.
+
+```
+POS ──POST /sales──▶ sales.service ──tx commits──▶ eventBus.publish("sale.created")
+                                                        │
+HQ browser ◀── event: sale.created ── GET /api/hq/events (SSE) ◀──┘
+     └─▶ useLiveReports invalidates the report queries → TanStack Query refetches
+```
+
+| Piece | Behaviour |
+|---|---|
+| Event bus | In-process `EventEmitter` ([`src/shared/events/eventBus.js`](backend/src/shared/events/eventBus.js)). `publish` never throws into the caller |
+| When it fires | Only **after the sale transaction commits**. Not on idempotent replays (200) and not on failed sales (4xx/5xx) |
+| Payload | `event: sale.created` · `data: {"outletId":1,"receiptNo":"DHA-000007"}` |
+| Stream | `GET /api/hq/events`, `text/event-stream`, `retry: 5000`, a `: heartbeat` comment every 25 s (keeps proxies from closing it), listener removed when the client disconnects, all streams closed on graceful shutdown |
+| Frontend | `useLiveReports` (mounted once in `HqLayout`) opens an `EventSource`. On `sale.created`, and after a reconnect, it invalidates the revenue and top-items queries |
+| Fallback | Report queries also refetch on window focus and every 60 s while Reports is open. The ⟳ button still works |
+
+Try it:
+```bash
+curl -N http://localhost:4000/api/hq/events      # terminal 1: prints ": connected", then events
+# terminal 2: create a sale (see Examples above). Terminal 1 prints:
+# event: sale.created
+# data: {"outletId":1,"receiptNo":"DHA-000001"}
+```
+
 ## 8. Authentication (not implemented)
 
 **Why it's out of scope:** the brief did not require authentication. The outlet is identified by `:outletId` in the URL. I
@@ -345,6 +375,11 @@ reporting load and operations. Full plan: **[SCALING_AND_EVOLUTION.md](backend/d
 - **Partitioning**: monthly range partitions for `sales`, `sale_items`, `inventory_logs`, plus archiving/retention.
 - **Queue for reports**: a transactional outbox → queue → daily summary table. Heavy exports run as async jobs.
 - **Infra**: stateless API containers behind a load balancer, managed Postgres with PITR, CI/CD with `migrate deploy`, metrics and alerts.
+- **Live updates across instances**: today's event bus is **in-process**. With several API instances, a sale handled by
+  instance A would not reach HQ browsers connected to instance B. The fix is to publish `sale.created` to **Redis pub/sub**.
+  Every instance subscribes and forwards to its own SSE clients. Postgres `LISTEN/NOTIFY`, or the outbox → broker, works
+  too. Only `eventBus.publish`/`subscribe` change, not the endpoint or the frontend. The load balancer must allow
+  long-lived connections; the 25 s heartbeat keeps them from being closed as idle.
 
 ## 10. Microservices evolution & Offline POS/KDS
 
