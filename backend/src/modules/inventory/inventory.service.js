@@ -99,10 +99,16 @@ function adjust(outletId, menuItemId, { quantity, note }) {
   });
 }
 
-async function listLogs(outletId, menuItemId, { limit }) {
+// Keyset pagination: `before` = id of the oldest log the client has, so deep pages cost the same as page 1.
+async function listLogs(outletId, menuItemId, { limit, before, type }) {
   await ensureOutlet(outletId);
   if (!(await inventoryRepository.findByKey(outletId, menuItemId))) throw notAssigned(outletId, menuItemId);
-  const logs = await inventoryLogRepository.findByItem(outletId, menuItemId, limit);
+  let cursor = null;
+  if (before) {
+    cursor = await inventoryLogRepository.findCursor(outletId, menuItemId, before);
+    if (!cursor) throw new AppError(400, "INVALID_CURSOR", `Log ${before} does not belong to this outlet item`);
+  }
+  const logs = await inventoryLogRepository.findByItem(outletId, menuItemId, { limit, cursor, type });
   return logs.map(toLogDto);
 }
 

@@ -1857,7 +1857,72 @@
                 "type": "text/javascript",
                 "exec": [
                   "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
-                  "pm.test(\"1 row\", () => { pm.expect(pm.response.json().data.length).to.eql(1); });"
+                  "pm.test(\"1 row\", () => { pm.expect(pm.response.json().data.length).to.eql(1); });",
+                  "pm.collectionVariables.set(\"firstLogId\", pm.response.json().data[0].id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get stock logs — next page (before=firstLogId) → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?limit=1&before={{firstLogId}}",
+            "description": "**GET …/logs?before=<log id>** — Keyset pagination: only logs older than `before`. Next page = last row's id."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "const logs = pm.response.json().data;",
+                  "pm.test(\"older row, no overlap\", () => { pm.expect(logs.length).to.eql(1); pm.expect(logs[0].changeType).to.eql(\"RESTOCK\"); pm.expect(logs[0].id).to.not.eql(Number(pm.collectionVariables.get(\"firstLogId\"))); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get stock logs — type=RESTOCK → 200",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?type=RESTOCK",
+            "description": "**GET …/logs?type=RESTOCK** — Filter by change type."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"only RESTOCK\", () => { const logs = pm.response.json().data; pm.expect(logs.length).to.be.above(0); logs.forEach(l => pm.expect(l.changeType).to.eql(\"RESTOCK\")); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get stock logs — unknown cursor → 400",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/hq/outlets/{{outletId}}/inventory/{{menuItemId}}/logs?before=2147483647",
+            "description": "**GET …/logs?before=<id>** — `before` must be a log of this outlet item."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status 400\", () => pm.response.to.have.status(400));",
+                  "pm.test(\"INVALID_CURSOR\", () => { pm.expect(pm.response.json().error.code).to.eql(\"INVALID_CURSOR\"); });"
                 ]
               }
             }

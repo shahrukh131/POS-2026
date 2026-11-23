@@ -32,6 +32,9 @@ const listLogs = {
   params: itemParams,
   query: z.object({
     limit: z.coerce.number().int().min(1).max(200).default(50),
+    // Keyset cursor: id of the last log already shown → returns older logs.
+    before: id.optional(),
+    type: z.enum(["RESTOCK", "SALE", "ADJUSTMENT"]).optional(),
   }),
 };
 

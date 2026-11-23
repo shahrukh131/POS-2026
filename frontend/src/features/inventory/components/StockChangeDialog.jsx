@@ -86,7 +86,13 @@ function StockChangeForm({ outletId, changeType, inventoryRow, onClose }) {
     const quantityChangeAmount = Number(quantityChange);
     const stockAfterChange = currentStock + quantityChangeAmount;
     stockChangeMutation.mutate(
-      { changeType, menuItemId: inventoryRow.menuItemId, quantityChange: quantityChangeAmount, note },
+      {
+        changeType,
+        menuItemId: inventoryRow.menuItemId,
+        quantityChange: quantityChangeAmount,
+        stockAfterChange,
+        note,
+      },
       {
         onSuccess: () => {
           toast.success(`${inventoryRow.name}: stock is now ${stockAfterChange}`);

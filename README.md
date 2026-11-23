@@ -212,7 +212,7 @@ Base URL: `http://localhost:4000` (manual setup) · `http://localhost:3000` (Doc
 | 13 | GET | `/api/hq/outlets/:outletId/inventory` | Stock per assigned item |
 | 14 | POST | `/api/hq/outlets/:outletId/inventory/:menuItemId/restock` | Add stock `{ quantity, note? }` → RESTOCK log |
 | 15 | PUT | `/api/hq/outlets/:outletId/inventory/:menuItemId` | Set absolute stock `{ quantity, note? }` → ADJUSTMENT log |
-| 16 | GET | `/api/hq/outlets/:outletId/inventory/:menuItemId/logs?limit=` | Movement history, newest first (limit 1–200, default 50) |
+| 16 | GET | `/api/hq/outlets/:outletId/inventory/:menuItemId/logs?limit=&before=&type=` | Movement history, newest first (limit 1–200, default 50). `before=<log id>` → older page (keyset), `type=RESTOCK\|SALE\|ADJUSTMENT` filter |
 | **HQ: reports** | | | |
 | 17 | GET | `/api/hq/reports/revenue-by-outlet?from=&to=` | Revenue + sale count per outlet (`YYYY-MM-DD`, inclusive, UTC) |
 | 18 | GET | `/api/hq/reports/top-items?outletId=&limit=&from=&to=` | Top N (default 5) items per outlet by quantity |

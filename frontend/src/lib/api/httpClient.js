@@ -71,6 +71,7 @@ async function sendRequest(httpMethod, path, requestBody) {
 export const httpGet = (path) => sendRequest('GET', path);
 export const httpPost = (path, requestBody = {}) => sendRequest('POST', path, requestBody);
 export const httpPatch = (path, requestBody = {}) => sendRequest('PATCH', path, requestBody);
+export const httpPut = (path, requestBody = {}) => sendRequest('PUT', path, requestBody);
 
 /** Builds `?a=1&b=2`, skipping empty values. Returns '' when nothing is left. */
 export function buildQueryString(queryParams) {

@@ -1,4 +1,6 @@
+import { History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import {
   Table,
   TableBody,
@@ -15,9 +17,10 @@ import { StockLevelBadge } from './StockLevelBadge';
  * @param {{
  *   inventoryRows: import('@/lib/api/responseMappers').OutletMenuItem[],
  *   onRequestStockChange: (stockChangeRequest: { changeType: string, inventoryRow: object }) => void,
+ *   onRequestHistory: (inventoryRow: object) => void,
  * }} props
  */
-export function InventoryTable({ inventoryRows, onRequestStockChange }) {
+export function InventoryTable({ inventoryRows, onRequestStockChange, onRequestHistory }) {
   return (
     <Table>
       <TableHeader>
@@ -55,6 +58,19 @@ export function InventoryTable({ inventoryRows, onRequestStockChange }) {
                   >
                     Adjust
                   </Button>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        size="icon-sm"
+                        variant="outline"
+                        aria-label={`Stock history for ${inventoryRow.name}`}
+                        onClick={() => onRequestHistory(inventoryRow)}
+                      >
+                        <History />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>Stock history</TooltipContent>
+                  </Tooltip>
                 </div>
               </TableCell>
             </TableRow>

@@ -8,16 +8,18 @@ export function useStockChangeMutation(outletId) {
   const queryClient = useQueryClient();
   return useMutation({
     /**
-     * @param {{ changeType: 'restock' | 'adjust', menuItemId: string, quantityChange: number, note: string }} variables
+     * Restock sends the amount to add. Adjust sends the new absolute stock (the backend logs new − old).
+     * @param {{ changeType: 'restock' | 'adjust', menuItemId: string, quantityChange: number, stockAfterChange: number, note: string }} variables
      */
-    mutationFn: ({ changeType, menuItemId, quantityChange, note }) =>
+    mutationFn: ({ changeType, menuItemId, quantityChange, stockAfterChange, note }) =>
       changeType === STOCK_CHANGE_TYPES.RESTOCK
         ? restockInventoryItem(outletId, menuItemId, { quantity: quantityChange, note: note || undefined })
-        : adjustInventoryItem(outletId, menuItemId, { delta: quantityChange, reason: note }),
-    // Stock levels are shown both here and on the outlet's POS screen.
+        : adjustInventoryItem(outletId, menuItemId, { quantity: stockAfterChange, note: note || undefined }),
+    // Stock levels are shown here, in the stock history and on the outlet's POS screen.
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({ queryKey: queryKeys.inventory(outletId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.inventoryLogs(outletId) }),
         queryClient.invalidateQueries({ queryKey: queryKeys.outletMenu(outletId) }),
       ]),
   });
