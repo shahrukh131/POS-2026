@@ -11,7 +11,11 @@ const errorHandler = require("./shared/middleware/errorHandler");
 const app = express();
 
 app.use(helmet());
-app.use(cors());
+// CORS_ORIGIN: comma-separated allow-list (e.g. the Docker web UI). Unset = allow any origin.
+const corsOrigin = process.env.CORS_ORIGIN
+  ? process.env.CORS_ORIGIN.split(",").map((o) => o.trim())
+  : true;
+app.use(cors({ origin: corsOrigin }));
 app.use(morgan(process.env.NODE_ENV === "development" ? "dev" : "combined"));
 app.use(express.json());
 

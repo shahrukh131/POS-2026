@@ -8,16 +8,19 @@ Node.js (CommonJS) · Express 5 · Zod 4 · Prisma 6.19 · PostgreSQL 16 · Reac
 fnb-hq/
   backend/              Express API (below)
   frontend/             React (Vite) app: HQ screens + outlet POS screen
-  docker-compose.yml    db + api + frontend
+  docker-compose.yml    db + api + web
+  .env.example          compose variables (copy to .env)
   README.md             setup, endpoints, schema, architecture, scaling
 ```
 
 ## Backend folder structure
 ```
 backend/
-  Dockerfile
+  Dockerfile            multi-stage image (see Docker & deployment)
+  docker-entrypoint.sh  migrate deploy → seed-if-empty → server
   prisma/schema/        one model per file, migrations/
   prisma/seed.js
+  scripts/              concurrency-test.js, seed-if-empty.js
   src/
     app.js              express app, middlewares, /health + /api
     server.js           starts the server
@@ -164,9 +167,22 @@ Error:   `{ "success": false, "error": { "code": "INSUFFICIENT_STOCK", "message"
 | `sale_items (menu_item_id)` | Top-items aggregation |
 
 ## Docker & deployment
-- `backend/Dockerfile` (single stage, `node:20-alpine`): copy `package*.json` + `prisma/` → `npm ci --omit=dev` → `npx prisma generate` → copy `src/` → on start `npx prisma migrate deploy && node src/server.js`.
-- This requires `prisma` (the CLI) to be in `dependencies`, not `devDependencies`, so `--omit=dev` keeps it for `migrate deploy` at startup. We chose this over a multi-stage build because it is simpler. **Pending:** move `prisma` in `package.json` when the Dockerfile is written.
-- Root `docker-compose.yml`: `db` (postgres:16, volume), `api` (depends on db healthcheck, `DATABASE_URL` from env), `frontend` (built static files served by nginx, proxies `/api`).
+- Run everything: `docker compose up --build` from the repo root (no `.env` needed, every variable has a default; see root `.env.example`). Reset: `docker compose down -v`.
+- `backend/Dockerfile` (multi-stage, `node:22-alpine` + `openssl`):
+  - `deps`: `npm ci --omit=dev` → `npx prisma generate`.
+  - runtime: copies `node_modules`, `prisma/`, `scripts/`, `src/`, entrypoint. Runs as the non-root `node` user.
+- `prisma` (the CLI) is in `dependencies`, so `--omit=dev` keeps it for `migrate deploy` and the seed at startup.
+- `backend/docker-entrypoint.sh`: retries `npx prisma migrate deploy` (up to 30 × 2s) → `node scripts/seed-if-empty.js` → `exec node src/server.js`.
+  - `seed-if-empty.js` runs `prisma/seed.js` only when `outlets` is empty. The seed re-applies catalog data, so running it on every restart would overwrite HQ edits.
+- `frontend/Dockerfile` (multi-stage): Vite build with build ARG `VITE_API_URL` → `nginx:1.27-alpine` serves `dist` (`frontend/nginx.conf`: SPA fallback `try_files … /index.html`, immutable cache for `/assets/`). The browser calls the API directly at `VITE_API_URL`, and nginx does not proxy `/api`.
+- Root `docker-compose.yml`:
+
+  | Service | Image / build | Host port | Notes |
+  |---|---|---|---|
+  | `db` | `postgres:16-alpine`, volume `pgdata` | `${DB_HOST_PORT:-5433}` → 5432 | healthcheck `pg_isready` |
+  | `api` | `./backend` | 3000 | waits for db `service_healthy`. `DATABASE_URL` → host `db`, `CORS_ORIGIN=http://localhost:8080`. Healthcheck `GET /health` |
+  | `web` | `./frontend` (`VITE_API_URL=http://localhost:3000`) | 8080 → 80 | static UI |
+- CORS: `CORS_ORIGIN` (comma-separated) restricts allowed origins. When it's unset (local dev), any origin is allowed.
 - Config only from env (`.env` locally, platform secrets when deployed). `/health` is used by the platform health check.
 
 ## Data model

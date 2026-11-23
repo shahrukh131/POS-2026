@@ -3606,7 +3606,7 @@
                 "exec": [
                   "pm.test(\"status 200\", () => pm.response.to.have.status(200));",
                   "const d = pm.response.json().data;",
-                  "pm.test(\"every row has the shape\", () => d.forEach((r) => { pm.expect(r).to.have.keys([\"outletId\", \"code\", \"name\", \"totalRevenue\", \"saleCount\"]); pm.expect(r.totalRevenue).to.match(/^d+.d{2}$/); }));",
+                  "pm.test(\"every row has the shape\", () => d.forEach((r) => { pm.expect(r).to.have.keys([\"outletId\", \"code\", \"name\", \"totalRevenue\", \"saleCount\"]); pm.expect(r.totalRevenue).to.match(/^\\d+\\.\\d{2}$/); }));",
                   "pm.test(\"sorted by revenue desc\", () => { for (let i = 1; i < d.length; i++) pm.expect(Number(d[i - 1].totalRevenue)).to.be.at.least(Number(d[i].totalRevenue)); });",
                   "const o = pm.response.json().data.find((x) => x.outletId === Number(pm.collectionVariables.get(\"outletId\")));",
                   "pm.test(\"test outlet: 4 sales, 6 × 19.99 = 119.94\", () => pm.expect([o.totalRevenue, o.saleCount]).to.eql([\"119.94\", 4]));",

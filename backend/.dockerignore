@@ -1,0 +1,14 @@
+node_modules
+.env
+.env.*
+!.env.example
+*.log
+logs
+.git
+.gitignore
+docs
+postman
+CLAUDE.md
+src/generated
+Dockerfile
+.dockerignore
