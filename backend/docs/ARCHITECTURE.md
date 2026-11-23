@@ -18,6 +18,7 @@ fnb-hq/
 backend/
   Dockerfile            multi-stage image (see Docker & deployment)
   docker-entrypoint.sh  migrate deploy → seed-if-empty → server
+  docs/                 ARCHITECTURE, BUSINESS_RULES, ERD, SCALING_AND_EVOLUTION, OFFLINE_POS_KDS, postman_collection.json
   prisma/schema/        one model per file, migrations/
   prisma/seed.js
   scripts/              concurrency-test.js, seed-if-empty.js

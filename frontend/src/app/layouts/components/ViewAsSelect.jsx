@@ -50,7 +50,7 @@ export function ViewAsSelect() {
   return (
     <div className="flex items-center gap-2">
       <Label htmlFor={viewAsSelectId} className="hidden text-muted-foreground sm:block">
-        View as
+        Demo role
       </Label>
       <Select value={selectedOptionValue} onValueChange={handleViewAsChange}>
         <SelectTrigger id={viewAsSelectId} className="w-56">

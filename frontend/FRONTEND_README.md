@@ -1,6 +1,6 @@
 # F&B HQ — Frontend
 
-Vite + React 18 + React Router 6, Tailwind CSS v4 + shadcn/ui, TanStack Query v5, react-hook-form + zod. No auth: a **"View as"** dropdown in the top bar switches between **HQ Admin** and any **Outlet** (saved in `localStorage`).
+Vite + React 18 + React Router 6, Tailwind CSS v4 + shadcn/ui, TanStack Query v5, react-hook-form + zod. No auth: a **"Demo role"** switcher in the top bar switches between **HQ Admin** and any **Outlet** (saved in `localStorage`).
 
 ## Setup
 
